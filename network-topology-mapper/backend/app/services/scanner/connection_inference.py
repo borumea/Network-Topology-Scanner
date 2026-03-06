@@ -190,7 +190,7 @@ class ConnectionInferenceEngine:
         ]
 
         for device in end_devices:
-            best_switch = self._find_best_switch(device, switches)
+            best_switch = self._find_best_switch(device, access_switches) or self._find_best_switch(device, switches)
             if best_switch:
                 connections.append(self._make_connection(
                     source=best_switch,
