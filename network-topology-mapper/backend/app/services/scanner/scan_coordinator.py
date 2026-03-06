@@ -27,8 +27,8 @@ class ScanCoordinator:
         self._devices_cache: dict[str, dict] = {}  # keyed by IP or MAC
 
     def start_scan(self, scan_type: str = "full", target: str = "192.168.0.0/24",
-                   intensity: str = "normal") -> str:
-        scan_id = str(uuid.uuid4())
+                   intensity: str = "normal", scan_id: Optional[str] = None) -> str:
+        scan_id = scan_id or str(uuid.uuid4())
         self._current_scan_id = scan_id
         self._devices_cache.clear()
 

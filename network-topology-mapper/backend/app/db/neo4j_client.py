@@ -137,24 +137,6 @@ class Neo4jClient:
             "dependencies": dependencies,
         }
 
-    def find_articulation_points(self) -> list[str]:
-        query = """
-        MATCH (d:Device)
-        WITH collect(d) as devices
-        UNWIND devices as d
-        MATCH (d)-[:CONNECTS_TO]-(neighbor)
-        WITH d, count(DISTINCT neighbor) as degree
-        WHERE degree >= 2
-        WITH d
-        OPTIONAL MATCH path = (a:Device)-[:CONNECTS_TO*]-(b:Device)
-        WHERE a <> d AND b <> d AND NOT d IN nodes(path)
-        WITH d, count(path) as alt_paths
-        WHERE alt_paths = 0
-        RETURN d.id as device_id
-        """
-        results = self.execute_read(query)
-        return [r["device_id"] for r in results]
-
     def clear_all(self):
         self.execute_write("MATCH (n) DETACH DELETE n")
 
