@@ -2,8 +2,8 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { useTopologyStore } from '../stores/topologyStore';
 import type { WSMessage, Device, Connection } from '../types/topology';
 
-// Connect directly to backend port since Vite proxy isn't working for WebSocket
-const WS_URL = `ws://localhost:8000/ws/topology`;
+const WS_PROTOCOL = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const WS_URL = `${WS_PROTOCOL}//${window.location.host}/ws/topology`;
 const RECONNECT_INTERVAL = 3000;
 const HEARTBEAT_INTERVAL = 30000;
 

@@ -7,3 +7,8 @@ NUL
 # Editors
 .vscode/
 .idea/
+
+# Environment
+.env
+*.env
+!.env.example

@@ -38,6 +38,10 @@ class EventBus:
     def publish_scan_progress(self, progress_data: dict):
         message = {"type": "scan_progress", "data": progress_data}
         redis_client.publish(CHANNEL_SCANS, message)
+        # Persist progress for polling (GET /api/scans/{scan_id}); graceful no-op if Redis unavailable
+        scan_id = progress_data.get("scan_id")
+        if scan_id:
+            redis_client.set_scan_progress(scan_id, progress_data)
         self._notify_ws(message)
 
     def _notify_ws(self, message: dict):
