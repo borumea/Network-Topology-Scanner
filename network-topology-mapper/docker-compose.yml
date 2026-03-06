@@ -1,3 +1,22 @@
+# =============================================================================
+# NETWORKING MODEL: bridge (named network "nts-net")
+#
+# All services communicate by container name, NOT localhost. This is required
+# for Mac compatibility — network_mode: host only works on Linux.
+#
+# Docker mode (inside containers):
+#   NEO4J_URI=bolt://neo4j:7687
+#   REDIS_URL=redis://redis:6379/0
+#   backend API: http://backend:8000
+#
+# Bare-metal dev (running backend locally, no Docker):
+#   NEO4J_URI=bolt://localhost:7687
+#   REDIS_URL=redis://localhost:6379/0
+#
+# Bridge networking is implemented in WO-047. This comment documents the
+# decision so downstream WOs set .env defaults correctly.
+# =============================================================================
+
 services:
   neo4j:
     image: neo4j:5-community
