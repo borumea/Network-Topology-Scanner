@@ -10,6 +10,7 @@ from app.services.scanner.passive_scanner import passive_scanner
 from app.services.scanner.snmp_poller import snmp_poller
 from app.services.scanner.config_puller import config_puller
 from app.services.graph.graph_builder import graph_builder
+from app.services.scanner.connection_inference import connection_inference
 from app.services.realtime.event_bus import event_bus
 from app.db.sqlite_db import sqlite_db
 from app.db.redis_client import redis_client
@@ -25,12 +26,14 @@ class ScanCoordinator:
     def __init__(self):
         self._current_scan_id: Optional[str] = None
         self._devices_cache: dict[str, dict] = {}  # keyed by IP or MAC
+        self._lldp_data: list[dict] = []
 
     def start_scan(self, scan_type: str = "full", target: str = "192.168.0.0/24",
                    intensity: str = "normal", scan_id: Optional[str] = None) -> str:
         scan_id = scan_id or str(uuid.uuid4())
         self._current_scan_id = scan_id
         self._devices_cache.clear()
+        self._lldp_data.clear()
 
         scan_record = {
             "id": scan_id,
@@ -65,6 +68,28 @@ class ScanCoordinator:
             # Phase 4: Config pull (SSH + LLDP for manageable devices)
             if scan_type == "full":
                 self._run_config_pull(scan_id)
+
+            # Phase 5: Connection inference — create edges from device data
+            event_bus.publish_scan_progress({
+                "scan_id": scan_id,
+                "percent": 90,
+                "phase": "connection_inference",
+                "devices_found": len(self._devices_cache),
+            })
+
+            inferred_connections = connection_inference.infer_connections(
+                devices=self._devices_cache,
+                target_subnet=target,
+                lldp_data=self._lldp_data if self._lldp_data else None,
+            )
+
+            for conn in inferred_connections:
+                graph_builder.upsert_connection(conn)
+
+            logger.info(
+                "Connection inference complete: %d edges created",
+                len(inferred_connections),
+            )
 
             # Finalize
             device_count = len(self._devices_cache)
@@ -211,6 +236,12 @@ class ScanCoordinator:
             )
             if neighbors:
                 logger.info("Found %d LLDP neighbors on %s", len(neighbors), ip)
+                # Preserve adjacency data for connection inference
+                self._lldp_data.append({
+                    "querying_device_id": device["id"],
+                    "querying_device_ip": ip,
+                    "neighbors": neighbors,
+                })
                 for neighbor in neighbors:
                     neighbor_device = {
                         "id": str(uuid.uuid4()),
