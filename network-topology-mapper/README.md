@@ -43,6 +43,40 @@ A real-time network topology mapping and analysis platform that discovers device
 
 ## Quick Start
 
+### Demo Mode (Zero Configuration)
+
+The fastest way to see NTS working end-to-end. Spins up the full stack plus 5 scannable demo containers on a private Docker network.
+
+**Prerequisites:** Docker, docker-compose
+
+```bash
+git clone <repository-url>
+cd network-topology-mapper
+
+# Start the full stack + demo network
+./demo.sh up
+
+# Once all services are healthy (~60s), trigger a scan
+./demo.sh scan
+
+# Check backend health
+./demo.sh status
+```
+
+**What happens:**
+- 5 demo containers start on `nts-net` (172.20.0.0/24): `web-server` (nginx), `db-server` (postgres), `file-server` (SSH+SMB), `printer` (JetDirect+IPP), `snmp-device` (net-snmp)
+- nmap discovers all containers on the bridge network
+- Connection inference creates star-topology edges through the Docker gateway (172.20.0.1)
+- Frontend at http://localhost:3000 renders the live topology graph
+- Neo4j Browser at http://localhost:7474 (neo4j / changeme) for raw graph inspection
+
+**Tear down:**
+```bash
+./demo.sh down
+```
+
+### Production Setup
+
 ### Prerequisites
 
 - Docker & Docker Compose
@@ -50,7 +84,7 @@ A real-time network topology mapping and analysis platform that discovers device
 - Node.js 18+ (for frontend development)
 - Neo4j, Redis (or use Docker Compose)
 
-### Using Docker Compose (Recommended)
+### Using Docker Compose
 
 1. Clone the repository:
 ```bash
