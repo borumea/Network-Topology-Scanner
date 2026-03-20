@@ -21,18 +21,17 @@ Complete installation and configuration guide for Network Topology Mapper.
 - **CPU**: 2 cores
 - **RAM**: 4 GB
 - **Storage**: 20 GB
-- **OS**: Linux, macOS, or Windows with WSL2
+- **OS**: Linux or macOS
 
 ### Recommended Requirements
 
 - **CPU**: 4+ cores
 - **RAM**: 8 GB
 - **Storage**: 50 GB SSD
-- **OS**: Linux (Ubuntu 20.04+, Debian 11+, RHEL 8+)
 
 ### Software Prerequisites
 
-**For Docker Deployment**:
+**For Docker Deployment** (recommended):
 - Docker 20.10+
 - Docker Compose 2.0+
 
@@ -47,7 +46,7 @@ Complete installation and configuration guide for Network Topology Mapper.
 
 ## Quick Start with Docker
 
-The fastest way to get started is using Docker Compose.
+The fastest way to get started is using the demo script.
 
 ### 1. Clone Repository
 
@@ -62,7 +61,7 @@ cd network-topology-mapper
 cp .env.example .env
 ```
 
-Edit `.env` and update the following required variables:
+Edit `.env` and update required variables:
 
 ```bash
 # Neo4j password (change this!)
@@ -78,52 +77,46 @@ SCAN_DEFAULT_RANGE=192.168.0.0/16
 ### 3. Start Services
 
 ```bash
-docker-compose up -d
+./demo.sh up
 ```
 
-This will start:
+This starts all services on the `nts-net` bridge network:
 - Frontend (React) on http://localhost:3000
 - Backend (FastAPI) on http://localhost:8000
 - Neo4j on http://localhost:7474
 - Redis on localhost:6379
 
-### 4. Verify Installation
-
-Check all services are running:
+### 4. Trigger First Scan
 
 ```bash
-docker-compose ps
+./demo.sh scan
 ```
 
-Expected output:
-```
-NAME                STATUS          PORTS
-network-mapper-frontend   running    0.0.0.0:3000->3000/tcp
-network-mapper-backend    running    0.0.0.0:8000->8000/tcp
-network-mapper-neo4j      running    0.0.0.0:7474->7474/tcp, 0.0.0.0:7687->7687/tcp
-network-mapper-redis      running    0.0.0.0:6379->6379/tcp
+Or via API:
+
+```bash
+curl -X POST http://localhost:8000/api/scan \
+  -H "Content-Type: application/json" \
+  -d '{"target": "172.20.0.0/24"}'
 ```
 
 ### 5. Access Application
 
-Open your browser:
 - **Main Application**: http://localhost:3000
 - **API Documentation**: http://localhost:8000/docs
 - **Neo4j Browser**: http://localhost:7474 (login: neo4j / your-password)
 
-### 6. Trigger First Scan
+### 6. Status Check
 
 ```bash
-curl -X POST http://localhost:8000/api/scans \
-  -H "Content-Type: application/json" \
-  -d '{"type": "full", "target": "192.168.1.0/24", "intensity": "normal"}'
+./demo.sh status
 ```
 
 ---
 
 ## Local Development Setup
 
-For development without Docker.
+For development without Docker (editing Python or frontend code directly).
 
 ### Backend Setup
 
@@ -140,19 +133,12 @@ sudo apt install -y python3.11 python3.11-venv python3-pip nmap libpcap-dev
 brew install python@3.11 nmap libpcap
 ```
 
-**Windows** (requires WSL2):
-```bash
-# In WSL2 Ubuntu
-sudo apt update
-sudo apt install python3.11 python3.11-venv nmap libpcap-dev
-```
-
 #### 2. Create Virtual Environment
 
 ```bash
 cd backend
-python3.11 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+python3.11 -m venv .venv
+source .venv/bin/activate
 ```
 
 #### 3. Install Python Dependencies
@@ -162,57 +148,22 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-#### 4. Install Neo4j
+#### 4. Start Neo4j + Redis via Docker
 
-**Ubuntu/Debian**:
 ```bash
-wget -O - https://debian.neo4j.com/neotechnology.gpg.key | sudo apt-key add -
-echo 'deb https://debian.neo4j.com stable latest' | sudo tee /etc/apt/sources.list.d/neo4j.list
-sudo apt update
-sudo apt install neo4j=1:5.17.0
-sudo systemctl start neo4j
-sudo systemctl enable neo4j
-```
-
-**macOS**:
-```bash
-brew install neo4j
-brew services start neo4j
-```
-
-**Docker** (alternative):
-```bash
+# Start just the databases (not the full app stack)
 docker run -d \
   --name neo4j \
   -p 7474:7474 -p 7687:7687 \
   -e NEO4J_AUTH=neo4j/your-password \
   neo4j:5-community
-```
 
-#### 5. Install Redis
-
-**Ubuntu/Debian**:
-```bash
-sudo apt install redis-server
-sudo systemctl start redis
-sudo systemctl enable redis
-```
-
-**macOS**:
-```bash
-brew install redis
-brew services start redis
-```
-
-**Docker** (alternative):
-```bash
 docker run -d --name redis -p 6379:6379 redis:7-alpine
 ```
 
-#### 6. Configure Environment
+#### 5. Configure Environment
 
 ```bash
-cd backend
 cp .env.example .env
 ```
 
@@ -227,13 +178,7 @@ SCAN_DEFAULT_RANGE=192.168.1.0/24
 ANTHROPIC_API_KEY=sk-ant-your-key
 ```
 
-#### 7. Initialize Database
-
-```bash
-python -c "from app.db.sqlite_db import init_db; init_db()"
-```
-
-#### 8. Start Backend Server
+#### 6. Start Backend Server
 
 ```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
@@ -256,9 +201,6 @@ sudo apt install -y nodejs
 brew install node@18
 ```
 
-**Windows**:
-Download from https://nodejs.org/
-
 #### 2. Install Dependencies
 
 ```bash
@@ -266,19 +208,7 @@ cd frontend
 npm install
 ```
 
-#### 3. Configure Environment
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env`:
-```bash
-VITE_API_URL=http://localhost:8000
-VITE_WS_URL=ws://localhost:8000/ws
-```
-
-#### 4. Start Development Server
+#### 3. Start Development Server
 
 ```bash
 npm run dev
@@ -286,29 +216,11 @@ npm run dev
 
 Frontend is now running at http://localhost:3000
 
-### Celery Workers (Optional for Background Tasks)
-
-#### 1. Start Celery Worker
-
-```bash
-cd backend
-celery -A app.tasks.celery_app worker --loglevel=info
-```
-
-#### 2. Start Celery Beat (Scheduler)
-
-```bash
-cd backend
-celery -A app.tasks.celery_app beat --loglevel=info
-```
-
 ---
 
 ## Configuration
 
 ### Environment Variables
-
-Complete list of environment variables:
 
 #### Database Configuration
 
@@ -375,61 +287,6 @@ WS_MAX_CONNECTIONS=100
 # Logging
 LOG_LEVEL=INFO
 LOG_FORMAT=json
-
-# Agent mode
-AGENT_MODE=alert  # alert | interactive | autonomous
-```
-
-#### Celery Configuration
-
-```bash
-# Celery broker
-CELERY_BROKER_URL=redis://localhost:6379/0
-CELERY_RESULT_BACKEND=redis://localhost:6379/1
-
-# Task schedules (cron expressions)
-SCHEDULE_FULL_SCAN=0 */6 * * *      # Every 6 hours
-SCHEDULE_SNMP_POLL=*/30 * * * *     # Every 30 minutes
-SCHEDULE_SNAPSHOT=0 0 * * *         # Daily at midnight
-```
-
-### Configuration Files
-
-#### Backend Configuration (`backend/app/config.py`)
-
-Application settings are managed via Pydantic Settings:
-
-```python
-from pydantic_settings import BaseSettings
-
-class Settings(BaseSettings):
-    neo4j_uri: str
-    neo4j_user: str
-    neo4j_password: str
-    redis_url: str
-    # ... other settings
-
-    class Config:
-        env_file = ".env"
-```
-
-#### Frontend Configuration (`frontend/vite.config.ts`)
-
-Vite configuration for development and build:
-
-```typescript
-export default defineConfig({
-  server: {
-    port: 3000,
-    proxy: {
-      '/api': 'http://localhost:8000',
-      '/ws': {
-        target: 'ws://localhost:8000',
-        ws: true
-      }
-    }
-  }
-})
 ```
 
 ---
@@ -463,12 +320,6 @@ CREATE INDEX device_hostname IF NOT EXISTS FOR (d:Device) ON (d.hostname);
 CREATE INDEX vlan_id IF NOT EXISTS FOR (v:VLAN) ON (v.id);
 ```
 
-#### 4. Verify Indexes
-
-```cypher
-SHOW INDEXES;
-```
-
 ### SQLite Configuration
 
 SQLite database is created automatically on first run.
@@ -482,86 +333,47 @@ python -c "from app.db.sqlite_db import init_db; init_db()"
 
 **Database location**: `backend/data/mapper.db`
 
-### Redis Configuration
-
-Redis typically works out of the box. For production, add authentication:
-
-**Edit `/etc/redis/redis.conf`**:
-```
-requirepass your-redis-password
-```
-
-**Restart Redis**:
-```bash
-sudo systemctl restart redis
-```
-
-**Update `.env`**:
-```bash
-REDIS_URL=redis://:your-redis-password@localhost:6379/0
-```
-
 ---
 
 ## Network Permissions
 
-Network scanning requires elevated privileges.
+Network scanning requires elevated privileges for nmap and Scapy.
 
-### Docker Network Mode
+### Docker Setup
 
-The backend container needs `host` network mode to see LAN traffic:
+The backend container runs with bridge networking (`nts-net`). Scanning capabilities are granted via `cap_add` in `docker-compose.yml`:
 
 ```yaml
-# docker-compose.yml
 services:
   backend:
-    network_mode: host
     cap_add:
       - NET_RAW
       - NET_ADMIN
 ```
 
+This is already configured — no changes needed for the demo.
+
 ### Local Development Permissions
 
-#### Option 1: Run as Root (Not Recommended)
+**macOS**: nmap installed via Homebrew runs with the required capabilities by default.
 
-```bash
-sudo uvicorn app.main:app --reload
-```
-
-#### Option 2: Grant Capabilities to Python
+**Linux**: Grant capabilities to Python and nmap:
 
 ```bash
 sudo setcap cap_net_raw,cap_net_admin=eip $(which python3.11)
+sudo setcap cap_net_raw,cap_net_admin=eip $(which nmap)
 ```
 
-#### Option 3: Add User to pcap Group
+Or add your user to the pcap group:
 
 ```bash
 sudo groupadd pcap
 sudo usermod -a -G pcap $USER
 sudo chgrp pcap $(which nmap)
 sudo chmod 750 $(which nmap)
-sudo setcap cap_net_raw,cap_net_admin=eip $(which nmap)
 ```
 
 Log out and back in for group changes to take effect.
-
-### Firewall Configuration
-
-Allow backend to send/receive network probes:
-
-**UFW (Ubuntu)**:
-```bash
-sudo ufw allow 8000/tcp
-sudo ufw allow from 192.168.0.0/16 to any port 161 proto udp  # SNMP
-```
-
-**firewalld (RHEL/CentOS)**:
-```bash
-sudo firewall-cmd --add-port=8000/tcp --permanent
-sudo firewall-cmd --reload
-```
 
 ---
 
@@ -571,12 +383,9 @@ sudo firewall-cmd --reload
 
 **Error: "Cannot connect to Neo4j"**
 
-Solution:
 ```bash
 # Check Neo4j status
 docker ps | grep neo4j
-# or
-sudo systemctl status neo4j
 
 # Verify credentials in .env match Neo4j password
 # Check connectivity
@@ -585,92 +394,69 @@ curl http://localhost:7474
 
 **Error: "Permission denied" on nmap**
 
-Solution:
 ```bash
-# Grant capabilities (see Network Permissions section)
+# Grant capabilities
 sudo setcap cap_net_raw,cap_net_admin=eip $(which python3.11)
 ```
 
 **Error: "Redis connection refused"**
 
-Solution:
 ```bash
-# Start Redis
-sudo systemctl start redis
-# or
 docker start redis
+# or: docker run -d --name redis -p 6379:6379 redis:7-alpine
 ```
 
 ### Frontend Won't Start
 
 **Error: "EADDRINUSE: Port 3000 in use"**
 
-Solution:
 ```bash
-# Kill process using port 3000
 npx kill-port 3000
-# or use different port
-npm run dev -- --port 3001
 ```
 
 **Error: "Cannot reach backend API"**
 
-Solution:
-- Verify backend is running: `curl http://localhost:8000/api/topology/stats`
+- Verify backend is running: `curl http://localhost:8000/api/health`
 - Check CORS settings in `backend/app/main.py`
 - Verify proxy configuration in `frontend/vite.config.ts`
 
 ### Scanning Issues
 
-**Error: "No devices found"**
+**No devices found**
 
-Solution:
 - Verify target network range in scan request
-- Check network connectivity: `ping 192.168.1.1`
-- Ensure backend has network permissions
-- Try passive scanning first
+- Check network connectivity: `ping 172.20.0.1`
+- Ensure backend has network permissions (see above)
 
-**Error: "Scan timeout"**
+**Scan timeout**
 
-Solution:
-- Reduce scan intensity to "light"
-- Reduce target range
-- Increase scan rate limit in .env
+- Reduce scan intensity
+- Reduce target subnet size
+- Check backend logs: `docker logs network-mapper-backend`
 
 ### Database Issues
 
 **Neo4j "Out of memory"**
 
-Solution:
-Edit `neo4j.conf`:
-```
-dbms.memory.heap.initial_size=2G
-dbms.memory.heap.max_size=4G
+Edit Neo4j configuration (via Docker env vars in `docker-compose.yml`):
+```yaml
+NEO4J_server_memory_heap_initial__size: 2G
+NEO4J_server_memory_heap_max__size: 4G
 ```
 
 **SQLite "Database locked"**
 
-Solution:
 - Ensure only one backend instance is running
 - Check file permissions on `data/mapper.db`
-- Restart backend service
+- Restart the backend service
 
 ### Performance Issues
 
 **Slow graph rendering**
 
-Solution:
-- Enable caching in browser
 - Reduce visible nodes with filters
-- Try a different layout algorithm (dagre/hierarchical is default; cola/force-directed can be slower on large graphs)
-- Increase hardware resources
-
-**High CPU usage during scans**
-
-Solution:
-- Reduce scan rate limit
-- Use passive scanning instead of active
-- Adjust scan schedule to off-peak hours
+- Try dagre layout (faster than force-directed for large graphs)
+- Increase hardware resources allocated to Docker
 
 ---
 
@@ -678,34 +464,17 @@ Solution:
 
 After successful setup:
 
-1. **Configure Scan Targets**: Edit `.env` to match your network
-2. **Trigger First Scan**: Use API or UI to start discovery
-3. **Explore Documentation**: Read [ARCHITECTURE.md](ARCHITECTURE.md) and [API.md](API.md)
-4. **Set Up Monitoring**: Configure logging and metrics
-5. **Production Deployment**: See [DEPLOYMENT.md](DEPLOYMENT.md)
-
----
-
-## Getting Help
-
-- **Documentation**: Check `docs/` directory
-- **GitHub Issues**: Report bugs and feature requests
-- **Community**: Join our discussion forum
-- **Commercial Support**: Contact for enterprise support options
+1. **Configure scan targets**: Edit `.env` to match your network
+2. **Trigger first scan**: Use `demo.sh scan` or the UI
+3. **Explore documentation**: Read [ARCHITECTURE.md](ARCHITECTURE.md) and [API.md](API.md)
 
 ---
 
 ## Security Notes
 
-- Change default passwords for Neo4j and Redis
-- Use HTTPS in production (reverse proxy required)
+- Change default passwords for Neo4j and Redis in `.env`
+- Use HTTPS in production (nginx reverse proxy required)
 - Restrict network access to services
 - Rotate API keys regularly
 - Review scan targets before running full scans
 - Keep dependencies up to date
-
----
-
-**Setup Complete!** 🎉
-
-Your Network Topology Mapper is ready to use.

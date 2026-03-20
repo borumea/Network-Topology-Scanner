@@ -24,6 +24,7 @@ __pycache__/
 
 # Database & data
 *.db
+data/
 **/data/*.db
 neo4j_data/
 redis_data/
