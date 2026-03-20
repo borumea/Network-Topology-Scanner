@@ -17,6 +17,9 @@ Complete API reference for the Network Topology Mapper backend.
 - [Simulation Endpoints](#simulation-endpoints)
 - [Alert Endpoints](#alert-endpoints)
 - [Report Endpoints](#report-endpoints)
+- [Snapshot Endpoints](#snapshot-endpoints)
+- [Settings Endpoints](#settings-endpoints)
+- [Scan Optimizer Endpoints](#scan-optimizer-endpoints)
 - [WebSocket](#websocket)
 - [Error Responses](#error-responses)
 
@@ -726,7 +729,7 @@ GET /api/reports/changelog
 Real-time event subscription via WebSocket.
 
 ```
-WS /ws/topology
+WS /ws
 ```
 
 **Client → Server (Subscribe)**:
@@ -854,6 +857,149 @@ GET /api/devices?limit=50&offset=100
     "has_next": true,
     "has_prev": true
   }
+}
+```
+
+---
+
+---
+
+## Snapshot Endpoints
+
+Topology snapshots capture Neo4j state at a point in time (stored in SQLite). Used for topology diff and history views.
+
+### List Snapshots
+
+```http
+GET /api/snapshots
+```
+
+**Response** (`200 OK`):
+
+```json
+{
+  "snapshots": [
+    {
+      "id": "snapshot-uuid",
+      "created_at": "2026-03-20T10:00:00Z",
+      "device_count": 10,
+      "connection_count": 9,
+      "risk_score": 0.42
+    }
+  ],
+  "total": 14
+}
+```
+
+### Get Snapshot
+
+```http
+GET /api/snapshots/{snapshot_id}
+```
+
+**Response** (`200 OK`):
+
+```json
+{
+  "id": "snapshot-uuid",
+  "created_at": "2026-03-20T10:00:00Z",
+  "device_count": 10,
+  "connection_count": 9,
+  "risk_score": 0.42,
+  "snapshot_data": {
+    "devices": [...],
+    "connections": [...]
+  }
+}
+```
+
+---
+
+## Settings Endpoints
+
+Settings are stored as key/value pairs in SQLite.
+
+### Get Settings
+
+```http
+GET /api/settings
+```
+
+**Response** (`200 OK`):
+
+```json
+{
+  "scan_interval_minutes": 60,
+  "anomaly_detection_enabled": true,
+  "snapshot_retention_days": 30,
+  "default_scan_target": "172.20.0.0/24",
+  "alert_severity_threshold": "medium"
+}
+```
+
+### Update Settings
+
+```http
+PUT /api/settings
+```
+
+**Request Body** (partial update, send only changed keys):
+
+```json
+{
+  "scan_interval_minutes": 120,
+  "default_scan_target": "192.168.1.0/24"
+}
+```
+
+**Response** (`200 OK`):
+
+```json
+{
+  "updated": ["scan_interval_minutes", "default_scan_target"],
+  "settings": {
+    "scan_interval_minutes": 120,
+    "anomaly_detection_enabled": true,
+    "snapshot_retention_days": 30,
+    "default_scan_target": "192.168.1.0/24",
+    "alert_severity_threshold": "medium"
+  }
+}
+```
+
+---
+
+## Scan Optimizer Endpoints
+
+AI-powered scan recommendations based on current topology and anomaly history.
+
+### Get Recommendations
+
+```http
+GET /api/scan-optimizer/recommendations
+```
+
+**Response** (`200 OK`):
+
+```json
+{
+  "generated_at": "2026-03-20T10:05:00Z",
+  "recommendations": [
+    {
+      "priority": "high",
+      "target": "172.20.0.5",
+      "reason": "Device shows anomalous port activity — deep scan recommended",
+      "suggested_scan_type": "deep",
+      "estimated_duration": "3-5 minutes"
+    },
+    {
+      "priority": "medium",
+      "target": "172.20.0.0/24",
+      "reason": "No full scan in last 6 hours",
+      "suggested_scan_type": "normal",
+      "estimated_duration": "1-2 minutes"
+    }
+  ]
 }
 ```
 
