@@ -223,7 +223,7 @@ sudo setcap cap_net_raw,cap_net_admin=eip /usr/bin/nmap
 # Log out and back in for group change
 ```
 
-4. **Docker**: Ensure proper capabilities:
+4. **Docker**: Ensure proper capabilities (already configured in `docker-compose.yml`):
 ```yaml
 # docker-compose.yml
 services:
@@ -231,7 +231,7 @@ services:
     cap_add:
       - NET_RAW
       - NET_ADMIN
-    network_mode: host
+    # Uses bridge networking (nts-net) — do NOT set network_mode: host
 ```
 
 ### No Devices Found During Scan

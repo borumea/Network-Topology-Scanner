@@ -99,6 +99,20 @@ class ScanCoordinator:
                 "devices_found": device_count,
             })
 
+            # Save topology snapshot
+            topology = graph_builder.get_full_topology()
+            self._save_snapshot(topology, device_count, len(inferred_connections))
+
+            # Run post-scan analysis in background (anomaly detection, SPOF, resilience)
+            def _run_analysis_bg():
+                try:
+                    from app.tasks.analysis_tasks import run_analysis
+                    run_analysis()
+                except Exception as exc:
+                    logger.warning("Post-scan analysis failed: %s", exc)
+            import threading as _th
+            _th.Thread(target=_run_analysis_bg, daemon=True).start()
+
             event_bus.publish_scan_progress({
                 "scan_id": scan_id,
                 "percent": 100,
@@ -275,6 +289,23 @@ class ScanCoordinator:
         else:
             self._devices_cache[key] = device
             graph_builder.upsert_device(device)
+
+    def _save_snapshot(self, topology: dict, device_count: int, edge_count: int):
+        try:
+            snapshot = {
+                "id": str(uuid.uuid4()),
+                "created_at": datetime.utcnow().isoformat(),
+                "device_count": device_count,
+                "connection_count": edge_count,
+                "risk_score": 0.0,
+                "snapshot_data": {
+                    "topology_json": topology,
+                },
+            }
+            sqlite_db.create_snapshot(snapshot)
+            logger.info("Topology snapshot saved: %d devices, %d edges", device_count, edge_count)
+        except Exception as e:
+            logger.warning("Failed to save topology snapshot: %s", e)
 
     def cancel_scan(self, scan_id: str):
         if self._current_scan_id == scan_id:

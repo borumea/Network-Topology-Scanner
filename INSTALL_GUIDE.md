@@ -1,4 +1,8 @@
-# Installation Guide - Neo4j & Redis on Windows
+# Installation Guide
+
+> **Tip:** For the fastest start, use Demo Mode — no manual installation required. See `QUICK_START_GUIDE.md` or run `./demo.sh up` from `network-topology-mapper/`. This guide covers manual Neo4j and Redis installation for production or local development on Windows.
+
+## Manual Installation - Neo4j & Redis
 
 ## Option A: Install Neo4j Desktop
 

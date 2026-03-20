@@ -30,10 +30,10 @@ A real-time network topology mapping and analysis platform that discovers device
 - **FastAPI** (Python 3.11+)
 - **Neo4j** graph database for device/connection storage
 - **Redis** for caching and real-time pub/sub
-- **SQLite** for metadata and alert history
-- **Celery** for background task processing
+- **SQLite** for scan history, alerts, topology snapshots, and settings
+- **asyncio-based task scheduler** for periodic scans and post-scan analysis
 - **NetworkX** for graph analysis
-- **scikit-learn** for anomaly detection
+- **scikit-learn** for anomaly detection (IsolationForest)
 
 ### Networking Tools
 - python-nmap for active scanning
@@ -43,6 +43,40 @@ A real-time network topology mapping and analysis platform that discovers device
 
 ## Quick Start
 
+### Demo Mode (Zero Configuration)
+
+The fastest way to see NTS working end-to-end. Spins up the full stack plus 5 scannable demo containers on a private Docker network.
+
+**Prerequisites:** Docker, docker-compose
+
+```bash
+git clone <repository-url>
+cd network-topology-mapper
+
+# Start the full stack + demo network
+./demo.sh up
+
+# Once all services are healthy (~60s), trigger a scan
+./demo.sh scan
+
+# Check backend health
+./demo.sh status
+```
+
+**What happens:**
+- 5 demo containers start on `nts-net` (172.20.0.0/24): `web-server` (nginx), `db-server` (postgres), `file-server` (SSH+SMB), `printer` (JetDirect+IPP), `snmp-device` (net-snmp)
+- nmap discovers all containers on the bridge network
+- Connection inference creates star-topology edges through the Docker gateway (172.20.0.1)
+- Frontend at http://localhost:3000 renders the live topology graph
+- Neo4j Browser at http://localhost:7474 (neo4j / changeme) for raw graph inspection
+
+**Tear down:**
+```bash
+./demo.sh down
+```
+
+### Production Setup
+
 ### Prerequisites
 
 - Docker & Docker Compose
@@ -50,7 +84,7 @@ A real-time network topology mapping and analysis platform that discovers device
 - Node.js 18+ (for frontend development)
 - Neo4j, Redis (or use Docker Compose)
 
-### Using Docker Compose (Recommended)
+### Using Docker Compose
 
 1. Clone the repository:
 ```bash
@@ -183,6 +217,27 @@ curl -X POST http://localhost:8000/api/simulate/failure \
   -d '{"remove_nodes": ["device-uuid-here"]}'
 ```
 
+### View Topology Snapshots
+```bash
+curl http://localhost:8000/api/snapshots
+```
+
+### Get Scan Optimizer Recommendations
+```bash
+curl http://localhost:8000/api/scan-optimizer/recommendations
+```
+
+### Read / Update Settings
+```bash
+# Get current settings
+curl http://localhost:8000/api/settings
+
+# Update scan interval and target range
+curl -X PUT http://localhost:8000/api/settings \
+  -H "Content-Type: application/json" \
+  -d '{"scan_interval_minutes": 10, "scan_default_range": "172.20.0.0/24"}'
+```
+
 ## Development
 
 ### Backend Development
@@ -309,4 +364,12 @@ For issues, questions, or suggestions:
 
 ---
 
-**Status**: Active Development | **Version**: 1.0.0 | **Last Updated**: February 2026
+**Status**: Active Development | **Version**: 1.0.0 | **Last Updated**: March 2026
+
+## Known Limitations
+
+- **Anomaly detection requires 5+ topology snapshots** to train the IsolationForest model. During initial demo runs, only rule-based detection (flapping links, unknown devices) is active. After 5 scheduled scans have run, the ML model trains automatically.
+- **Passive scanning** (Scapy ARP sniffing) is disabled in demo mode — Docker bridge networking doesn't support raw packet capture across containers. Only nmap active scanning runs.
+- **SNMP polling** requires the `snmp-device` demo container to respond to the `public` community string on UDP 161. If the container starts slowly, the first scan may miss it.
+- **Settings changes** (via `PUT /api/settings`) take effect immediately for stored values, but `scan_interval_minutes` only applies to new scheduler instances. Restart the backend container to change the scan interval.
+- **Neo4j memory**: Default Neo4j Docker config uses 512MB heap. For large topologies (500+ devices), increase `NEO4J_server_memory_heap_max__size` in `docker-compose.yml`.

@@ -1,0 +1,75 @@
+# =============================================================================
+# NTS Demo Network Overlay
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.demo.yml \
+#     --env-file .env.demo up -d
+#
+# Adds 5 scannable demo containers to nts-net:
+#   web-server   — nginx (ports 80, 443)
+#   db-server    — postgres (port 5432)
+#   file-server  — Alpine with SSH (22) + SMB listeners (139, 445)
+#   printer      — Alpine with JetDirect (9100) + IPP (631) listeners
+#   snmp-device  — Alpine with net-snmp responding to community "public"
+#
+# Fixed subnet: 172.20.0.0/24
+# Gateway: 172.20.0.1 (Docker bridge gateway — detected by connection inference)
+# =============================================================================
+
+services:
+  # Override backend env_file to use demo settings
+  backend:
+    env_file: .env.demo
+
+  # ---------------------------------------------------------------------------
+  # Demo containers
+  # ---------------------------------------------------------------------------
+
+  web-server:
+    image: nginx:alpine
+    networks:
+      - nts-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:80 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  db-server:
+    image: postgres:16-alpine
+    networks:
+      - nts-net
+    environment:
+      POSTGRES_PASSWORD: demo
+      POSTGRES_DB: demodb
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  file-server:
+    build: ./demo/file-server
+    networks:
+      - nts-net
+    restart: unless-stopped
+
+  printer:
+    build: ./demo/printer
+    networks:
+      - nts-net
+    restart: unless-stopped
+
+  snmp-device:
+    build: ./demo/snmp-device
+    networks:
+      - nts-net
+    restart: unless-stopped
+
+networks:
+  nts-net:
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
