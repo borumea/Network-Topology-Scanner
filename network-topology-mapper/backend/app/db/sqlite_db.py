@@ -207,6 +207,21 @@ class SQLiteDB:
         self._conn.commit()
         return snapshot
 
+    def get_snapshot(self, snapshot_id: str) -> Optional[dict]:
+        cursor = self._conn.cursor()
+        cursor.execute("SELECT * FROM topology_snapshots WHERE id = ?", (snapshot_id,))
+        row = cursor.fetchone()
+        if row:
+            d = dict(row)
+            d["snapshot_data"] = json.loads(d.get("snapshot_data", "{}"))
+            return d
+        return None
+
+    def get_snapshot_count(self) -> int:
+        cursor = self._conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM topology_snapshots")
+        return cursor.fetchone()[0]
+
     def get_snapshots(self, limit: int = 50) -> list[dict]:
         cursor = self._conn.cursor()
         cursor.execute(

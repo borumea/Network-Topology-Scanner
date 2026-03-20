@@ -11,7 +11,7 @@ from app.db.sqlite_db import sqlite_db
 from app.db.redis_client import redis_client
 from app.services.realtime.ws_manager import ws_manager
 from app.services.realtime.event_bus import event_bus
-from app.routers import topology, scans, simulation, alerts, reports
+from app.routers import topology, scans, simulation, alerts, reports, snapshots
 
 logging.basicConfig(
     level=logging.INFO,
@@ -61,6 +61,19 @@ def load_mock_data():
 _mock_topology = None
 
 
+async def _scheduled_scan_loop(interval_seconds: int):
+    """Runs a full scan on the configured interval until cancelled."""
+    from app.tasks.scan_tasks import scheduled_full_scan
+    import threading
+
+    logger.info("Scheduled scan loop started (interval: %ds)", interval_seconds)
+    while True:
+        await asyncio.sleep(interval_seconds)
+        logger.info("Scheduled scan firing...")
+        thread = threading.Thread(target=scheduled_full_scan, daemon=True)
+        thread.start()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
@@ -78,9 +91,18 @@ async def lifespan(app: FastAPI):
     global _mock_topology
     _mock_topology = load_mock_data()
 
+    # Start scheduled scan loop if configured
+    _scan_task = None
+    if settings.scan_interval_minutes > 0:
+        interval = settings.scan_interval_minutes * 60
+        _scan_task = asyncio.create_task(_scheduled_scan_loop(interval))
+        logger.info("Scheduled scans enabled every %d minutes", settings.scan_interval_minutes)
+
     yield
 
     # Cleanup
+    if _scan_task:
+        _scan_task.cancel()
     neo4j_client.close()
     sqlite_db.close()
     redis_client.close()
@@ -109,6 +131,7 @@ app.include_router(scans.router)
 app.include_router(simulation.router)
 app.include_router(alerts.router)
 app.include_router(reports.router)
+app.include_router(snapshots.router)
 
 
 @app.get("/")
@@ -118,11 +141,14 @@ def root():
 
 @app.get("/api/health")
 def health():
+    settings = get_settings()
     return {
         "status": "ok",
         "neo4j": neo4j_client.available,
         "redis": redis_client.available,
         "websocket_clients": ws_manager.connection_count,
+        "snapshot_count": sqlite_db.get_snapshot_count(),
+        "scan_interval_minutes": settings.scan_interval_minutes,
     }
 
 

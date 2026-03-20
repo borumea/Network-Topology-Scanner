@@ -2,7 +2,6 @@ import logging
 import uuid
 from datetime import datetime
 
-from app.tasks.celery_app import celery_app
 from app.services.graph.spof_detector import spof_detector
 from app.services.graph.resilience_scorer import resilience_scorer
 from app.services.ai.anomaly_detector import anomaly_detector
@@ -12,20 +11,13 @@ from app.db.sqlite_db import sqlite_db
 logger = logging.getLogger(__name__)
 
 
-@celery_app.task(name="app.tasks.analysis_tasks.run_analysis")
-def run_analysis():
+def run_analysis() -> dict:
     topology = graph_builder.get_full_topology()
 
-    # Run SPOF detection
     spofs = spof_detector.find_spofs()
-
-    # Run resilience scoring
     resilience = resilience_scorer.calculate_global_resilience()
-
-    # Run anomaly detection
     anomalies = anomaly_detector.detect(topology)
 
-    # Save topology snapshot
     snapshot = {
         "id": str(uuid.uuid4()),
         "created_at": datetime.utcnow().isoformat(),
@@ -38,6 +30,10 @@ def run_analysis():
         },
     }
     sqlite_db.create_snapshot(snapshot)
+    logger.info(
+        "Analysis complete: %d devices, %d SPOFs, %d anomalies",
+        snapshot["device_count"], len(spofs), len(anomalies),
+    )
 
     return {
         "spofs": len(spofs),
