@@ -30,10 +30,10 @@ A real-time network topology mapping and analysis platform that discovers device
 - **FastAPI** (Python 3.11+)
 - **Neo4j** graph database for device/connection storage
 - **Redis** for caching and real-time pub/sub
-- **SQLite** for metadata and alert history
-- **Celery** for background task processing
+- **SQLite** for scan history, alerts, topology snapshots, and settings
+- **asyncio-based task scheduler** for periodic scans and post-scan analysis
 - **NetworkX** for graph analysis
-- **scikit-learn** for anomaly detection
+- **scikit-learn** for anomaly detection (IsolationForest)
 
 ### Networking Tools
 - python-nmap for active scanning
@@ -217,6 +217,27 @@ curl -X POST http://localhost:8000/api/simulate/failure \
   -d '{"remove_nodes": ["device-uuid-here"]}'
 ```
 
+### View Topology Snapshots
+```bash
+curl http://localhost:8000/api/snapshots
+```
+
+### Get Scan Optimizer Recommendations
+```bash
+curl http://localhost:8000/api/scan-optimizer/recommendations
+```
+
+### Read / Update Settings
+```bash
+# Get current settings
+curl http://localhost:8000/api/settings
+
+# Update scan interval and target range
+curl -X PUT http://localhost:8000/api/settings \
+  -H "Content-Type: application/json" \
+  -d '{"scan_interval_minutes": 10, "scan_default_range": "172.20.0.0/24"}'
+```
+
 ## Development
 
 ### Backend Development
@@ -343,4 +364,12 @@ For issues, questions, or suggestions:
 
 ---
 
-**Status**: Active Development | **Version**: 1.0.0 | **Last Updated**: February 2026
+**Status**: Active Development | **Version**: 1.0.0 | **Last Updated**: March 2026
+
+## Known Limitations
+
+- **Anomaly detection requires 5+ topology snapshots** to train the IsolationForest model. During initial demo runs, only rule-based detection (flapping links, unknown devices) is active. After 5 scheduled scans have run, the ML model trains automatically.
+- **Passive scanning** (Scapy ARP sniffing) is disabled in demo mode — Docker bridge networking doesn't support raw packet capture across containers. Only nmap active scanning runs.
+- **SNMP polling** requires the `snmp-device` demo container to respond to the `public` community string on UDP 161. If the container starts slowly, the first scan may miss it.
+- **Settings changes** (via `PUT /api/settings`) take effect immediately for stored values, but `scan_interval_minutes` only applies to new scheduler instances. Restart the backend container to change the scan interval.
+- **Neo4j memory**: Default Neo4j Docker config uses 512MB heap. For large topologies (500+ devices), increase `NEO4J_server_memory_heap_max__size` in `docker-compose.yml`.

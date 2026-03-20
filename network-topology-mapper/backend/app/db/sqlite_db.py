@@ -235,5 +235,25 @@ class SQLiteDB:
             result.append(d)
         return result
 
+    # Settings operations
+    def get_setting(self, key: str) -> Optional[str]:
+        cursor = self._conn.cursor()
+        cursor.execute("SELECT value FROM settings WHERE key = ?", (key,))
+        row = cursor.fetchone()
+        return row[0] if row else None
+
+    def set_setting(self, key: str, value: str) -> None:
+        cursor = self._conn.cursor()
+        cursor.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (key, value),
+        )
+        self._conn.commit()
+
+    def get_all_settings(self) -> dict:
+        cursor = self._conn.cursor()
+        cursor.execute("SELECT key, value FROM settings")
+        return {row[0]: row[1] for row in cursor.fetchall()}
+
 
 sqlite_db = SQLiteDB()

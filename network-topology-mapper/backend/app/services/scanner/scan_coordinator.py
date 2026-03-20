@@ -103,6 +103,16 @@ class ScanCoordinator:
             topology = graph_builder.get_full_topology()
             self._save_snapshot(topology, device_count, len(inferred_connections))
 
+            # Run post-scan analysis in background (anomaly detection, SPOF, resilience)
+            def _run_analysis_bg():
+                try:
+                    from app.tasks.analysis_tasks import run_analysis
+                    run_analysis()
+                except Exception as exc:
+                    logger.warning("Post-scan analysis failed: %s", exc)
+            import threading as _th
+            _th.Thread(target=_run_analysis_bg, daemon=True).start()
+
             event_bus.publish_scan_progress({
                 "scan_id": scan_id,
                 "percent": 100,

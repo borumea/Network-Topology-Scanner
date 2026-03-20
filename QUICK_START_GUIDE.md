@@ -1,4 +1,31 @@
-# Quick Start Guide - Get Real Data Into Your Network Mapper
+# Quick Start Guide
+
+## Recommended: Demo Mode (Zero Config, Works Right Away)
+
+The fastest path to a working topology graph. Uses a Docker overlay with 5 scannable demo containers.
+
+```bash
+cd network-topology-mapper
+
+# Start full stack + demo network (takes ~60s for all containers to be healthy)
+./demo.sh up
+
+# Trigger a scan once services are healthy
+./demo.sh scan
+
+# Open http://localhost:3000 to see the topology graph
+```
+
+**What you get:** nginx web server, postgres DB, file server (SSH+SMB), JetDirect printer, SNMP device — all on `nts-net` (172.20.0.0/24). The backend scans them with nmap, runs connection inference, and renders a star topology graph.
+
+**Tear down:**
+```bash
+./demo.sh down
+```
+
+---
+
+## Manual Setup Options
 
 You have **3 options** to add real network data:
 
