@@ -21,19 +21,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def _load_inmemory_mock():
-    """Generate mock data for in-memory fallback only. Never writes to Neo4j."""
-    from app.services.mock_data import generate_mock_topology
-    mock = generate_mock_topology()
-    logger.info("In-memory mock data ready: %d devices, %d connections",
-                len(mock["devices"]), len(mock["connections"]))
-    return mock
-
-
-# Global mock storage for when Neo4j is unavailable
-_mock_topology = None
-
-
 async def _scheduled_scan_loop(interval_seconds: int):
     """Runs a full scan on the configured interval until cancelled."""
     from app.tasks.scan_tasks import scheduled_full_scan
@@ -60,19 +47,14 @@ async def lifespan(app: FastAPI):
     sqlite_db.connect()
     redis_client.connect()
 
-    # Mock data is only used as in-memory fallback when Neo4j is unavailable.
-    # When Neo4j is available, start with 0 devices — real scans populate the graph.
-    global _mock_topology
     if neo4j_client.available:
         device_count = neo4j_client.execute_read(
             "MATCH (d:Device) RETURN count(d) AS cnt"
         )
         cnt = device_count[0]["cnt"] if device_count else 0
-        logger.info("Neo4j available with %d devices. No mock data loaded.", cnt)
-        _mock_topology = None
+        logger.info("Neo4j available with %d devices.", cnt)
     else:
-        logger.info("Neo4j unavailable — loading in-memory mock data for fallback.")
-        _mock_topology = _load_inmemory_mock()
+        logger.warning("Neo4j unavailable. Scans will not persist until Neo4j is connected.")
 
     # Start scheduled scan loop if configured
     _scan_task = None
@@ -160,64 +142,3 @@ async def websocket_topology(websocket: WebSocket):
     except Exception as e:
         logger.error("WebSocket error: %s", e)
         ws_manager.disconnect(websocket)
-
-
-# Override graph_builder to use mock data when Neo4j unavailable
-_original_get_full_topology = None
-
-
-def _patched_get_full_topology(layer=None, vlan=None, subnet=None,
-                                device_type=None, risk_min=None):
-    global _mock_topology
-    if not neo4j_client.available and _mock_topology:
-        from app.services.graph.graph_builder import GraphBuilder
-        devices = list(_mock_topology.get("devices", []))
-        connections = list(_mock_topology.get("connections", []))
-        dependencies = list(_mock_topology.get("dependencies", []))
-
-        if layer == "physical":
-            phys_types = {"router", "switch", "ap", "firewall"}
-            conn_types = {"ethernet", "fiber", "wireless"}
-            devices = [d for d in devices if d.get("device_type") in phys_types]
-            device_ids = {d["id"] for d in devices}
-            connections = [c for c in connections
-                          if c.get("connection_type") in conn_types
-                          and c.get("source_id") in device_ids
-                          and c.get("target_id") in device_ids]
-            dependencies = []
-        elif layer == "application":
-            app_types = {"server", "firewall"}
-            devices = [d for d in devices if d.get("device_type") in app_types]
-            device_ids = {d["id"] for d in devices}
-            connections = [c for c in connections
-                          if c.get("source_id") in device_ids and c.get("target_id") in device_ids]
-
-        if vlan is not None:
-            devices = [d for d in devices if vlan in d.get("vlan_ids", [])]
-        if subnet:
-            devices = [d for d in devices if d.get("subnet") == subnet]
-        if device_type:
-            devices = [d for d in devices if d.get("device_type") == device_type]
-        if risk_min is not None:
-            devices = [d for d in devices if d.get("risk_score", 0) >= risk_min]
-
-        device_ids = {d["id"] for d in devices}
-        connections = [c for c in connections
-                       if c.get("source_id") in device_ids and c.get("target_id") in device_ids]
-        dependencies = [dep for dep in dependencies
-                        if dep.get("source_id") in device_ids and dep.get("target_id") in device_ids]
-
-        return {"devices": devices, "connections": connections, "dependencies": dependencies}
-
-    return _original_get_full_topology(layer, vlan, subnet, device_type, risk_min)
-
-
-def _patch_graph_builder():
-    global _original_get_full_topology
-    from app.services.graph.graph_builder import graph_builder
-    _original_get_full_topology = graph_builder.get_full_topology
-    graph_builder.get_full_topology = _patched_get_full_topology
-
-
-# Apply the patch after import
-_patch_graph_builder()
