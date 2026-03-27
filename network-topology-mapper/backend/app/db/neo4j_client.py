@@ -36,6 +36,7 @@ class Neo4jClient:
             session.run("CREATE INDEX IF NOT EXISTS FOR (d:Device) ON (d.id)")
             session.run("CREATE INDEX IF NOT EXISTS FOR (d:Device) ON (d.ip)")
             session.run("CREATE INDEX IF NOT EXISTS FOR (v:VLAN) ON (v.vlan_id)")
+            session.run("CREATE CONSTRAINT IF NOT EXISTS FOR (d:Device) REQUIRE d.ip IS UNIQUE")
 
     @property
     def available(self) -> bool:

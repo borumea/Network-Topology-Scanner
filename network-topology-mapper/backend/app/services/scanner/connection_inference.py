@@ -314,7 +314,7 @@ class ConnectionInferenceEngine:
     ) -> dict:
         """Build a connection dict matching the schema from mock_data.py."""
         return {
-            "id": str(uuid.uuid4()),
+            "id": f"conn-{source['id']}-{target['id']}",
             "source_id": source["id"],
             "target_id": target["id"],
             "connection_type": connection_type,

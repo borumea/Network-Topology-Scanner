@@ -3,6 +3,7 @@ from typing import Optional
 import threading
 import uuid
 
+from app.config import get_settings
 from app.models.scan import ScanRequest
 from app.services.scanner.scan_coordinator import scan_coordinator
 from app.db.sqlite_db import sqlite_db
@@ -14,14 +15,15 @@ router = APIRouter(prefix="/api", tags=["scans"])
 @router.post("/scans")
 def trigger_scan(request: ScanRequest):
     scan_id = str(uuid.uuid4())
+    target = request.target or get_settings().scan_default_range
 
     def run():
-        scan_coordinator.start_scan(request.type.value, request.target, request.intensity, scan_id=scan_id)
+        scan_coordinator.start_scan(request.type.value, target, request.intensity, scan_id=scan_id)
 
     thread = threading.Thread(target=run, daemon=True)
     thread.start()
 
-    return {"status": "started", "scan_id": scan_id, "message": f"Scan {request.type.value} initiated for {request.target}"}
+    return {"status": "started", "scan_id": scan_id, "message": f"Scan {request.type.value} initiated for {target}"}
 
 
 @router.get("/scans")

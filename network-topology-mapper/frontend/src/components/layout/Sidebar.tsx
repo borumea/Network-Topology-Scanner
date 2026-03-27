@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
 import {
-  Map, LayoutDashboard, Search, Zap, Bell, BarChart3, Clock, FileText, Settings,
+  Map, LayoutDashboard, Search, Zap, Bell, BarChart3, Clock, FileText, Settings, Network,
 } from 'lucide-react';
 import { useTopologyStore } from '../../stores/topologyStore';
-import { useSettingsStore } from '../../stores/settingsStore';
 import type { ViewType } from '../../types/topology';
 
 const navItems: { icon: React.ElementType; label: string; view: ViewType }[] = [
@@ -20,14 +19,10 @@ const navItems: { icon: React.ElementType; label: string; view: ViewType }[] = [
 
 export default function Sidebar() {
   const { currentView, setCurrentView, setRightPanelContent } = useTopologyStore();
-  const { sidebarExpanded, toggleSidebar } = useSettingsStore();
   const [alertCount, setAlertCount] = useState(0);
 
-  // Track alert count via WebSocket events without fetching
   useEffect(() => {
-    const handler = () => {
-      setAlertCount((prev) => prev + 1);
-    };
+    const handler = () => setAlertCount((prev) => prev + 1);
     window.addEventListener('ws-alert', handler);
     return () => window.removeEventListener('ws-alert', handler);
   }, []);
@@ -45,54 +40,40 @@ export default function Sidebar() {
   };
 
   return (
-    <aside
-      className="h-full py-4 pl-4"
-    >
-      <nav
-        className="h-full flex flex-col bg-bg-secondary/40 backdrop-blur-xl border border-white/5 rounded-2xl shadow-2xl transition-all duration-300 overflow-hidden"
-        style={{ width: sidebarExpanded ? 240 : 72 }}
-        onMouseEnter={() => !sidebarExpanded && toggleSidebar()}
-        onMouseLeave={() => sidebarExpanded && toggleSidebar()}
-      >
-        <div className="flex-1 py-3 px-3 space-y-1">
-          {navItems.map(({ icon: Icon, label, view }) => {
-            const isActive = currentView === view;
-            return (
-              <button
-                key={view}
-                onClick={() => handleNavClick(view)}
-                className={`
-                  w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm transition-all duration-200 relative group
-                  ${isActive
-                    ? 'text-white bg-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.15)]'
-                    : 'text-text-secondary hover:text-white hover:bg-white/5'
-                  }
-                `}
-                title={label}
-              >
-                {isActive && (
-                  <div className="absolute left-0 w-1 h-8 bg-blue-500 rounded-r-full shadow-[0_0_10px_#3B82F6]" />
-                )}
+    <aside className="h-full w-[200px] flex-shrink-0 border-r border-border bg-bg-primary flex flex-col">
+      {/* Logo */}
+      <div className="h-12 flex items-center px-4 border-b border-border gap-2.5">
+        <Network size={18} className="text-accent" />
+        <span className="text-sm font-semibold">NTS</span>
+      </div>
 
-                <div className={`relative z-10 p-1 rounded-lg transition-colors ${isActive ? 'text-blue-400' : 'group-hover:text-white'}`}>
-                  <Icon size={20} className="flex-shrink-0" />
-                </div>
+      {/* Nav */}
+      <nav className="flex-1 py-2 px-2 space-y-0.5 overflow-y-auto">
+        {navItems.map(({ icon: Icon, label, view }) => {
+          const isActive = currentView === view;
+          return (
+            <button
+              key={view}
+              onClick={() => handleNavClick(view)}
+              className={`
+                w-full flex items-center gap-2.5 px-2.5 py-[7px] rounded-md text-[13px] transition-colors relative
+                ${isActive
+                  ? 'bg-bg-tertiary text-text-primary font-medium'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-bg-secondary'
+                }
+              `}
+            >
+              <Icon size={15} className={isActive ? 'text-accent-light' : ''} />
+              <span>{label}</span>
 
-                <span className={`whitespace-nowrap font-medium transition-all duration-300 overflow-hidden ${sidebarExpanded ? 'opacity-100 max-w-[150px]' : 'opacity-0 max-w-0'
-                  } ${isActive ? 'text-white' : ''}`}>
-                  {label}
+              {view === 'alerts' && alertCount > 0 && (
+                <span className="ml-auto flex h-4 min-w-[16px] items-center justify-center rounded-full bg-status-offline text-[10px] font-medium text-white px-1">
+                  {alertCount > 9 ? '9+' : alertCount}
                 </span>
-
-                {view === 'alerts' && alertCount > 0 && (
-                  <span className={`absolute top-3 right-3 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500/80 text-[10px] font-bold text-white shadow-lg transition-all duration-300 ${!sidebarExpanded ? 'right-2 top-2' : ''
-                    }`}>
-                    {alertCount > 9 ? '9+' : alertCount}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+              )}
+            </button>
+          );
+        })}
       </nav>
     </aside>
   );

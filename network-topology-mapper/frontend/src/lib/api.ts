@@ -28,7 +28,7 @@ export const fetchDeviceDependencies = (id: string) =>
   request<any>(`/devices/${id}/dependencies`);
 
 // Scans
-export const triggerScan = (type: string = 'full', target: string = '192.168.0.0/16', intensity: string = 'normal') =>
+export const triggerScan = (type: string = 'full', target: string = '', intensity: string = 'normal') =>
   request<any>('/scans', {
     method: 'POST',
     body: JSON.stringify({ type, target, intensity }),

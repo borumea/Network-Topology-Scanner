@@ -21,40 +21,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def load_mock_data():
-    """Load mock data if Neo4j is empty or unavailable."""
-    from app.services.mock_data import generate_mock_topology, generate_mock_alerts, generate_mock_scans
-
+def _load_inmemory_mock():
+    """Generate mock data for in-memory fallback only. Never writes to Neo4j."""
+    from app.services.mock_data import generate_mock_topology
     mock = generate_mock_topology()
-    mock_alerts = generate_mock_alerts()
-    mock_scans = generate_mock_scans()
-
-    if neo4j_client.available:
-        # Clear old data and load fresh mock data
-        logger.info("Clearing Neo4j and loading mock data...")
-        neo4j_client.clear_all()
-        from app.services.graph.graph_builder import graph_builder
-        graph_builder.bulk_upsert(
-            mock["devices"], mock["connections"], mock.get("dependencies", [])
-        )
-        logger.info("Mock data loaded: %d devices, %d connections",
-                    len(mock["devices"]), len(mock["connections"]))
-    else:
-        logger.info("Neo4j unavailable. Mock data stored in memory.")
-
-    # Load mock alerts and scans into SQLite
-    for alert in mock_alerts:
-        try:
-            sqlite_db.create_alert(alert)
-        except Exception:
-            pass
-
-    for scan in mock_scans:
-        try:
-            sqlite_db.create_scan(scan)
-        except Exception:
-            pass
-
+    logger.info("In-memory mock data ready: %d devices, %d connections",
+                len(mock["devices"]), len(mock["connections"]))
     return mock
 
 
@@ -88,9 +60,19 @@ async def lifespan(app: FastAPI):
     sqlite_db.connect()
     redis_client.connect()
 
-    # Load mock data into Neo4j so the UI has something to display
+    # Mock data is only used as in-memory fallback when Neo4j is unavailable.
+    # When Neo4j is available, start with 0 devices — real scans populate the graph.
     global _mock_topology
-    _mock_topology = load_mock_data()
+    if neo4j_client.available:
+        device_count = neo4j_client.execute_read(
+            "MATCH (d:Device) RETURN count(d) AS cnt"
+        )
+        cnt = device_count[0]["cnt"] if device_count else 0
+        logger.info("Neo4j available with %d devices. No mock data loaded.", cnt)
+        _mock_topology = None
+    else:
+        logger.info("Neo4j unavailable — loading in-memory mock data for fallback.")
+        _mock_topology = _load_inmemory_mock()
 
     # Start scheduled scan loop if configured
     _scan_task = None

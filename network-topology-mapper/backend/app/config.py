@@ -15,11 +15,16 @@ class Settings(BaseSettings):
     sqlite_path: str = "./data/mapper.db"
 
     # Scanning
-    scan_default_range: str = "192.168.0.0/16"
+    scan_default_range: str = "192.168.1.0/24"
     scan_rate_limit: int = 1000
-    scan_passive_interface: str = "eth0"
+    scan_passive_interface: str = ""  # empty = auto-detect via Scapy
     snmp_community: str = "public"
     snmp_version: str = "2c"
+
+    # Scan phase toggles
+    enable_active_scan: bool = True
+    enable_passive_scan: bool = True
+    enable_snmp_scan: bool = True
 
     # SSH / Device Config
     ssh_username: str = "admin"
@@ -43,7 +48,7 @@ class Settings(BaseSettings):
     agent_mode: str = "alert"
 
     class Config:
-        env_file = ".env"
+        env_file = (".env", "../.env")
         env_file_encoding = "utf-8"
 
 

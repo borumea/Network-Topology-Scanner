@@ -16,20 +16,20 @@ export default function MetricsBar() {
       value: stats.total_devices,
       label: 'Devices',
       sub: `${stats.online} online`,
-      color: '#3B82F6',
+      color: '#6366F1',
     },
     {
       icon: Link2,
       value: stats.total_connections,
       label: 'Links',
-      sub: `${stats.connection_uptime_pct}% up`,
-      color: '#10B981',
+      sub: `${stats.connection_uptime_pct}% uptime`,
+      color: '#34D399',
     },
     {
       icon: AlertTriangle,
       value: riskScore.toFixed(1),
       label: 'Risk Score',
-      sub: `/10`,
+      sub: '/ 10',
       color: riskColor,
     },
     {
@@ -37,44 +37,29 @@ export default function MetricsBar() {
       value: stats.spof_count,
       label: 'SPOFs',
       sub: `${spofs.filter((s) => s.impact > 10).length} critical`,
-      color: stats.spof_count > 0 ? '#EF4444' : '#10B981',
+      color: stats.spof_count > 0 ? '#F87171' : '#34D399',
       alert: stats.spof_count > 0,
     },
   ];
 
   return (
-    <div className="flex gap-4 p-4 flex-shrink-0">
+    <div className="flex gap-3 px-4 py-3 border-b border-border flex-shrink-0">
       {cards.map((card) => (
         <div
           key={card.label}
-          className={`
-            flex-1 flex items-center gap-4 bg-bg-secondary/40 backdrop-blur-md rounded-2xl px-5 py-4 border transition-all duration-300 cursor-pointer shadow-lg group relative overflow-hidden
-            ${card.alert
-              ? 'border-red-500/30 bg-red-500/10 hover:border-red-500/50'
-              : 'border-white/5 hover:border-white/10 hover:bg-bg-secondary/60'
-            }
-          `}
+          className={`flex-1 flex items-center gap-3 rounded-lg px-3.5 py-2.5 border transition-colors ${
+            card.alert
+              ? 'border-status-offline/20 bg-status-offline/5'
+              : 'border-border bg-bg-secondary'
+          }`}
         >
-          {/* Background Gradient Glow */}
-          <div className="absolute inset-0 bg-gradient-to-br from-transparent to-white/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-
-          <div className={`
-            p-3 rounded-xl bg-white/5 border border-white/5 group-hover:scale-110 transition-transform duration-300
-            ${card.alert ? 'bg-red-500/20 text-red-400' : ''}
-          `}>
-            <card.icon size={22} style={{ color: card.alert ? undefined : card.color }} className="flex-shrink-0" />
-          </div>
-
+          <card.icon size={16} style={{ color: card.color }} className="flex-shrink-0 opacity-70" />
           <div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-white tracking-tight">{card.value}</span>
-              {card.sub && (
-                <span className={`text-xs font-medium ${card.alert ? 'text-red-300' : 'text-text-muted'}`}>
-                  {card.sub}
-                </span>
-              )}
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-lg font-semibold text-text-primary leading-none">{card.value}</span>
+              <span className="text-[11px] text-text-muted">{card.sub}</span>
             </div>
-            <div className="text-[10px] text-text-muted/80 uppercase tracking-widest font-semibold mt-0.5">{card.label}</div>
+            <div className="text-[11px] text-text-muted mt-0.5">{card.label}</div>
           </div>
         </div>
       ))}

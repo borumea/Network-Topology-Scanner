@@ -7,6 +7,15 @@ import threading
 logger = logging.getLogger(__name__)
 
 
+def _device_id_from_ip(ip: str, mac: str = "") -> str:
+    """Generate a deterministic device ID from IP (preferred) or MAC."""
+    if ip:
+        return f"device-{ip}"
+    if mac:
+        return f"device-{mac}"
+    return str(uuid.uuid4())
+
+
 class PassiveScanner:
     """Uses Scapy to passively sniff ARP, DNS, DHCP traffic."""
 
@@ -29,7 +38,19 @@ class PassiveScanner:
     def is_running(self) -> bool:
         return self._running
 
-    def start(self, interface: str = "eth0", callback: Callable = None):
+    def _resolve_interface(self, interface: str) -> str:
+        """Resolve interface name. If empty, auto-detect the default via Scapy."""
+        if interface:
+            return interface
+        try:
+            from scapy.all import conf
+            default = conf.iface
+            logger.info("Auto-detected network interface: %s", default)
+            return str(default) if default else "eth0"
+        except Exception:
+            return "eth0"
+
+    def start(self, interface: str = "", callback: Callable = None):
         if not self._scapy:
             logger.warning("Scapy unavailable, cannot start passive scanner")
             return
@@ -38,6 +59,7 @@ class PassiveScanner:
             logger.warning("Passive scanner already running")
             return
 
+        interface = self._resolve_interface(interface)
         self._callback = callback
         self._running = True
         self._thread = threading.Thread(
@@ -83,7 +105,7 @@ class PassiveScanner:
             if pkt.haslayer(ARP):
                 if pkt[ARP].op == 2:  # ARP reply
                     return {
-                        "id": str(uuid.uuid4()),
+                        "id": _device_id_from_ip(pkt[ARP].psrc, pkt[ARP].hwsrc),
                         "ip": pkt[ARP].psrc,
                         "mac": pkt[ARP].hwsrc,
                         "hostname": "",
@@ -97,7 +119,7 @@ class PassiveScanner:
             if pkt.haslayer(DNS) and pkt.haslayer(IP):
                 if pkt[DNS].qr == 1:  # DNS response
                     return {
-                        "id": str(uuid.uuid4()),
+                        "id": _device_id_from_ip(pkt[IP].src, pkt.src if hasattr(pkt, 'src') else ""),
                         "ip": pkt[IP].src,
                         "mac": pkt.src if hasattr(pkt, 'src') else "",
                         "hostname": "",
@@ -114,7 +136,7 @@ class PassiveScanner:
                 options = {opt[0]: opt[1] for opt in pkt[DHCP].options if isinstance(opt, tuple)}
                 if options.get("message-type") == 2:  # DHCP offer
                     return {
-                        "id": str(uuid.uuid4()),
+                        "id": _device_id_from_ip(pkt[IP].src if pkt.haslayer(IP) else "", pkt.src if hasattr(pkt, 'src') else ""),
                         "ip": pkt[IP].src if pkt.haslayer(IP) else "",
                         "mac": pkt.src if hasattr(pkt, 'src') else "",
                         "hostname": "",

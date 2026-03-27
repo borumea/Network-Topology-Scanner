@@ -15,27 +15,35 @@ html, body, #root {
 }
 
 body {
-  font-family: 'Google Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background-color: #0B0D13;
-  color: #F0F4F8;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background-color: #111113;
+  color: #ECECED;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
+/* Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #161922;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #555B6E;
+  background: rgba(255, 255, 255, 0.08);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #8B8FA3;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* Monospace for data */
+.font-mono {
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
 }
 
 @layer utilities {

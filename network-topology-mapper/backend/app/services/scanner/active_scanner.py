@@ -9,6 +9,15 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
+def _device_id_from_ip(ip: str, mac: str = "") -> str:
+    """Generate a deterministic device ID from IP (preferred) or MAC."""
+    if ip:
+        return f"device-{ip}"
+    if mac:
+        return f"device-{mac}"
+    return str(uuid.uuid4())
+
+
 class ActiveScanner:
     """Calls nmap directly via subprocess to avoid python-nmap Windows bugs."""
 
@@ -122,7 +131,7 @@ class ActiveScanner:
             device_type = self._guess_device_type(open_ports, services, vendor, os_match)
 
             device = {
-                "id": str(uuid.uuid4()),
+                "id": _device_id_from_ip(ip, mac),
                 "ip": ip,
                 "mac": mac,
                 "hostname": hostname or ip,

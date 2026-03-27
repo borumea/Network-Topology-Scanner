@@ -34,7 +34,7 @@ class Scan(BaseModel):
 
 class ScanRequest(BaseModel):
     type: ScanType = ScanType.FULL
-    target: str = "192.168.0.0/16"
+    target: str = ""  # empty = use SCAN_DEFAULT_RANGE from server config
     intensity: str = "normal"
 
 

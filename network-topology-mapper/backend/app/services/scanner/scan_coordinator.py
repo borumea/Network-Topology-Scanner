@@ -20,6 +20,15 @@ logger = logging.getLogger(__name__)
 PASSIVE_SCAN_DURATION = 30  # seconds
 
 
+def _device_id_from_ip(ip: str, mac: str = "") -> str:
+    """Generate a deterministic device ID from IP (preferred) or MAC."""
+    if ip:
+        return f"device-{ip}"
+    if mac:
+        return f"device-{mac}"
+    return str(uuid.uuid4())
+
+
 class ScanCoordinator:
     """Orchestrates scan phases and deduplicates results."""
 
@@ -34,6 +43,17 @@ class ScanCoordinator:
         self._current_scan_id = scan_id
         self._devices_cache.clear()
         self._lldp_data.clear()
+
+        # Pre-populate cache from Neo4j so we merge with existing devices
+        try:
+            existing = graph_builder.get_full_topology()
+            for dev in existing.get("devices", []):
+                key = dev.get("ip") or dev.get("mac", "")
+                if key:
+                    self._devices_cache[key] = dev
+            logger.info("Pre-loaded %d existing devices into scan cache", len(self._devices_cache))
+        except Exception as e:
+            logger.warning("Could not pre-load devices: %s", e)
 
         scan_record = {
             "id": scan_id,
@@ -53,16 +73,18 @@ class ScanCoordinator:
         })
 
         try:
+            settings = get_settings()
+
             # Phase 1: Active scan (nmap)
-            if scan_type in ("active", "full"):
+            if scan_type in ("active", "full") and settings.enable_active_scan:
                 self._run_active_scan(scan_id, target, intensity)
 
             # Phase 2: Passive scan (scapy ARP/DNS/DHCP sniffing)
-            if scan_type in ("passive", "full"):
+            if scan_type in ("passive", "full") and settings.enable_passive_scan:
                 self._run_passive_scan(scan_id)
 
             # Phase 3: SNMP poll (device details for SNMP-capable devices)
-            if scan_type in ("snmp", "full"):
+            if scan_type in ("snmp", "full") and settings.enable_snmp_scan:
                 self._run_snmp_poll(scan_id)
 
             # Phase 4: Config pull (SSH + LLDP for manageable devices)
@@ -258,7 +280,7 @@ class ScanCoordinator:
                 })
                 for neighbor in neighbors:
                     neighbor_device = {
-                        "id": str(uuid.uuid4()),
+                        "id": _device_id_from_ip(neighbor.get("ip", ""), ""),
                         "ip": neighbor.get("ip", ""),
                         "hostname": neighbor.get("hostname", ""),
                         "device_type": "unknown",
@@ -274,7 +296,7 @@ class ScanCoordinator:
         logger.info("Config pull phase complete: %d devices queried via SSH", pulled)
 
     def _deduplicate_and_store(self, device: dict):
-        key = device.get("mac") or device.get("ip", "")
+        key = device.get("ip") or device.get("mac", "")
         if not key:
             return
 
