@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import json
+import os
+import sys
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,11 +16,27 @@ from app.services.realtime.event_bus import event_bus
 from app.routers import topology, scans, simulation, alerts, reports, snapshots
 from app.routers import settings as settings_router
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
+# --- Logging setup: console + file ---
+os.makedirs("data", exist_ok=True)
+LOG_FILE = os.path.join("data", "nts-debug.log")
+
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.DEBUG)
+
+# Console: INFO and above
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+root_logger.addHandler(console_handler)
+
+# File: DEBUG and above (everything)
+file_handler = logging.FileHandler(LOG_FILE, mode="w", encoding="utf-8")
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s (%(filename)s:%(lineno)d): %(message)s"))
+root_logger.addHandler(file_handler)
+
 logger = logging.getLogger(__name__)
+logger.info("=== NTS DEBUG LOG START === Log file: %s", os.path.abspath(LOG_FILE))
 
 
 async def _scheduled_scan_loop(interval_seconds: int):
@@ -39,13 +57,42 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     logger.info("Starting Network Topology Mapper...")
 
+    # Dump ALL settings for debugging
+    logger.debug("=== CONFIGURATION DUMP ===")
+    logger.debug("  neo4j_uri:              %s", settings.neo4j_uri)
+    logger.debug("  neo4j_user:             %s", settings.neo4j_user)
+    logger.debug("  neo4j_password:         %s", "***" if settings.neo4j_password else "(empty)")
+    logger.debug("  redis_url:              %s", settings.redis_url)
+    logger.debug("  sqlite_path:            %s", settings.sqlite_path)
+    logger.debug("  scan_default_range:     %s", settings.scan_default_range)
+    logger.debug("  scan_rate_limit:        %d", settings.scan_rate_limit)
+    logger.debug("  scan_passive_interface: '%s'", settings.scan_passive_interface)
+    logger.debug("  enable_active_scan:     %s", settings.enable_active_scan)
+    logger.debug("  enable_passive_scan:    %s", settings.enable_passive_scan)
+    logger.debug("  enable_snmp_scan:       %s", settings.enable_snmp_scan)
+    logger.debug("  snmp_community:         %s", settings.snmp_community)
+    logger.debug("  ssh_username:           '%s'", settings.ssh_username)
+    logger.debug("  scan_interval_minutes:  %d", settings.scan_interval_minutes)
+    logger.debug("  app_host:               %s", settings.app_host)
+    logger.debug("  app_port:               %d", settings.app_port)
+    logger.debug("  log_level:              %s", settings.log_level)
+    logger.debug("  agent_mode:             %s", settings.agent_mode)
+    logger.debug("  CWD:                    %s", os.getcwd())
+    logger.debug("  Python:                 %s", sys.version)
+    logger.debug("=== END CONFIG DUMP ===")
+
     # Store event loop for thread-safe WebSocket broadcasts
     event_bus.set_loop(asyncio.get_event_loop())
 
     # Initialize databases
+    logger.debug("Connecting to Neo4j...")
     neo4j_client.connect()
+    logger.debug("Connecting to SQLite...")
     sqlite_db.connect()
+    logger.debug("Connecting to Redis...")
     redis_client.connect()
+
+    logger.info("Database status: neo4j=%s, redis=%s, sqlite=connected", neo4j_client.available, redis_client.available)
 
     if neo4j_client.available:
         device_count = neo4j_client.execute_read(
@@ -54,7 +101,7 @@ async def lifespan(app: FastAPI):
         cnt = device_count[0]["cnt"] if device_count else 0
         logger.info("Neo4j available with %d devices.", cnt)
     else:
-        logger.warning("Neo4j unavailable. Scans will not persist until Neo4j is connected.")
+        logger.warning("NEO4J IS NOT AVAILABLE. Scans will not persist. Check NEO4J_URI and that the DBMS is started.")
 
     # Start scheduled scan loop if configured
     _scan_task = None

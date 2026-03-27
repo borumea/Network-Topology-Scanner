@@ -44,6 +44,13 @@ class ScanCoordinator:
         self._devices_cache.clear()
         self._lldp_data.clear()
 
+        logger.info("=" * 60)
+        logger.info("SCAN STARTED: id=%s", scan_id)
+        logger.info("  scan_type:  %s", scan_type)
+        logger.info("  target:     %s", target)
+        logger.info("  intensity:  %s", intensity)
+        logger.info("=" * 60)
+
         # Pre-populate cache from Neo4j so we merge with existing devices
         try:
             existing = graph_builder.get_full_topology()
@@ -53,7 +60,9 @@ class ScanCoordinator:
                     self._devices_cache[key] = dev
             logger.info("Pre-loaded %d existing devices into scan cache", len(self._devices_cache))
         except Exception as e:
-            logger.warning("Could not pre-load devices: %s", e)
+            logger.warning("Could not pre-load devices from Neo4j: %s", e)
+            import traceback
+            logger.debug("Pre-load traceback:\n%s", traceback.format_exc())
 
         scan_record = {
             "id": scan_id,
@@ -64,6 +73,7 @@ class ScanCoordinator:
             "config": {"intensity": intensity},
         }
         sqlite_db.create_scan(scan_record)
+        logger.debug("Scan record created in SQLite: %s", scan_record)
 
         event_bus.publish_scan_progress({
             "scan_id": scan_id,
@@ -74,24 +84,50 @@ class ScanCoordinator:
 
         try:
             settings = get_settings()
+            logger.debug("Scan settings: enable_active=%s, enable_passive=%s, enable_snmp=%s",
+                         settings.enable_active_scan, settings.enable_passive_scan, settings.enable_snmp_scan)
 
             # Phase 1: Active scan (nmap)
-            if scan_type in ("active", "full") and settings.enable_active_scan:
+            phase1_run = scan_type in ("active", "full") and settings.enable_active_scan
+            logger.info("Phase 1 (active nmap): %s (scan_type=%s, enable_active=%s)",
+                        "RUNNING" if phase1_run else "SKIPPED", scan_type, settings.enable_active_scan)
+            if phase1_run:
                 self._run_active_scan(scan_id, target, intensity)
+            logger.info("After Phase 1: %d devices in cache", len(self._devices_cache))
 
             # Phase 2: Passive scan (scapy ARP/DNS/DHCP sniffing)
-            if scan_type in ("passive", "full") and settings.enable_passive_scan:
+            phase2_run = scan_type in ("passive", "full") and settings.enable_passive_scan
+            logger.info("Phase 2 (passive scapy): %s (scan_type=%s, enable_passive=%s)",
+                        "RUNNING" if phase2_run else "SKIPPED", scan_type, settings.enable_passive_scan)
+            if phase2_run:
                 self._run_passive_scan(scan_id)
+            logger.info("After Phase 2: %d devices in cache", len(self._devices_cache))
 
             # Phase 3: SNMP poll (device details for SNMP-capable devices)
-            if scan_type in ("snmp", "full") and settings.enable_snmp_scan:
+            phase3_run = scan_type in ("snmp", "full") and settings.enable_snmp_scan
+            logger.info("Phase 3 (SNMP poll): %s (scan_type=%s, enable_snmp=%s)",
+                        "RUNNING" if phase3_run else "SKIPPED", scan_type, settings.enable_snmp_scan)
+            if phase3_run:
                 self._run_snmp_poll(scan_id)
+            logger.info("After Phase 3: %d devices in cache", len(self._devices_cache))
 
             # Phase 4: Config pull (SSH + LLDP for manageable devices)
-            if scan_type == "full":
+            phase4_run = scan_type == "full"
+            logger.info("Phase 4 (config pull): %s", "RUNNING" if phase4_run else "SKIPPED")
+            if phase4_run:
                 self._run_config_pull(scan_id)
+            logger.info("After Phase 4: %d devices in cache", len(self._devices_cache))
 
-            # Phase 5: Connection inference — create edges from device data
+            # Dump all cached devices before inference
+            logger.debug("=== DEVICE CACHE BEFORE INFERENCE ===")
+            for ip_key, dev in self._devices_cache.items():
+                logger.debug("  [%s] id=%s hostname=%s type=%s ports=%s services=%s",
+                             ip_key, dev.get("id"), dev.get("hostname"), dev.get("device_type"),
+                             dev.get("open_ports", []), dev.get("services", []))
+            logger.debug("=== END DEVICE CACHE ===")
+
+            # Phase 5: Connection inference
+            logger.info("Phase 5 (connection inference): RUNNING with %d devices", len(self._devices_cache))
             event_bus.publish_scan_progress({
                 "scan_id": scan_id,
                 "percent": 90,
@@ -105,16 +141,15 @@ class ScanCoordinator:
                 lldp_data=self._lldp_data if self._lldp_data else None,
             )
 
+            logger.info("Connection inference returned %d edges", len(inferred_connections))
             for conn in inferred_connections:
+                logger.debug("  Edge: %s -> %s (type=%s)", conn.get("source_id"), conn.get("target_id"), conn.get("connection_type"))
                 graph_builder.upsert_connection(conn)
-
-            logger.info(
-                "Connection inference complete: %d edges created",
-                len(inferred_connections),
-            )
 
             # Finalize
             device_count = len(self._devices_cache)
+            logger.info("SCAN COMPLETE: %d devices, %d connections", device_count, len(inferred_connections))
+
             sqlite_db.update_scan(scan_id, {
                 "status": "completed",
                 "completed_at": datetime.utcnow().isoformat(),
@@ -123,9 +158,12 @@ class ScanCoordinator:
 
             # Save topology snapshot
             topology = graph_builder.get_full_topology()
+            logger.debug("Final topology from Neo4j: %d devices, %d connections, %d dependencies",
+                         len(topology.get("devices", [])), len(topology.get("connections", [])),
+                         len(topology.get("dependencies", [])))
             self._save_snapshot(topology, device_count, len(inferred_connections))
 
-            # Run post-scan analysis in background (anomaly detection, SPOF, resilience)
+            # Run post-scan analysis in background
             def _run_analysis_bg():
                 try:
                     from app.tasks.analysis_tasks import run_analysis
@@ -143,7 +181,9 @@ class ScanCoordinator:
             })
 
         except Exception as e:
-            logger.error("Scan %s failed: %s", scan_id, e)
+            logger.error("SCAN %s FAILED: %s", scan_id, e)
+            import traceback
+            logger.error("Scan failure traceback:\n%s", traceback.format_exc())
             sqlite_db.update_scan(scan_id, {
                 "status": "failed",
                 "completed_at": datetime.utcnow().isoformat(),

@@ -35,13 +35,14 @@ class ActiveScanner:
     def scan_network(self, target: str = "192.168.0.0/24",
                      intensity: str = "normal",
                      callback=None) -> list[dict]:
+        logger.info("=== ACTIVE SCANNER START === target=%s, intensity=%s", target, intensity)
+
         if not self._nmap_path:
-            logger.warning("Nmap unavailable, returning empty results")
+            logger.warning("Nmap unavailable (not in PATH), returning empty results")
             return []
 
-        # --unprivileged: skip raw sockets (avoids Windows assertion crash in python-nmap)
-        # -PS: TCP connect ping for host discovery (works without admin)
-        # --host-timeout 1500ms: skip hosts that don't respond quickly (dead IPs timeout fast)
+        logger.debug("nmap binary: %s", self._nmap_path)
+
         args = {
             "light": "--unprivileged -sn -PS21,22,80,139,443,445,3389,8080 --host-timeout 1500ms -T4",
             "normal": "--unprivileged -sT -sV -PS21,22,80,139,443,445,3389,8080 --top-ports 100 --host-timeout 10s -T4 --max-retries 1",
@@ -52,31 +53,64 @@ class ActiveScanner:
         logger.info("Running nmap command: %s", " ".join(cmd))
 
         try:
+            import time as _time
+            t0 = _time.monotonic()
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            elapsed = _time.monotonic() - t0
+
+            logger.info("nmap finished in %.1f seconds, return code: %d", elapsed, result.returncode)
+            logger.debug("nmap stderr: %s", result.stderr.strip() if result.stderr else "(empty)")
+            logger.debug("nmap stdout length: %d bytes", len(result.stdout) if result.stdout else 0)
 
             if result.returncode != 0:
-                logger.error("Nmap failed with code %d: %s", result.returncode, result.stderr)
+                logger.error("Nmap FAILED with code %d", result.returncode)
+                logger.error("nmap stderr:\n%s", result.stderr)
+                logger.error("nmap stdout (first 2000 chars):\n%s", result.stdout[:2000] if result.stdout else "(empty)")
                 return []
+
+            if not result.stdout or not result.stdout.strip():
+                logger.error("nmap returned empty stdout!")
+                return []
+
+            # Log first 500 chars of XML for debugging
+            logger.debug("nmap XML output (first 500 chars):\n%s", result.stdout[:500])
 
             root = ET.fromstring(result.stdout)
 
         except subprocess.TimeoutExpired:
-            logger.error("Nmap scan timed out")
+            logger.error("Nmap scan timed out after 600 seconds")
             return []
         except ET.ParseError as e:
-            logger.error("Failed to parse nmap XML output: %s", e)
+            logger.error("Failed to parse nmap XML: %s", e)
+            logger.error("Raw stdout (first 2000 chars):\n%s", result.stdout[:2000] if result.stdout else "(empty)")
             return []
         except Exception as e:
-            logger.error("Nmap scan failed: %s", e)
+            logger.error("Nmap scan failed with exception: %s", e)
+            import traceback
+            logger.error("Traceback:\n%s", traceback.format_exc())
             return []
 
+        # Count total hosts in XML
+        all_hosts = root.findall("host")
+        logger.info("nmap XML contains %d host elements", len(all_hosts))
+
         devices = []
-        for host_el in root.findall("host"):
+        for host_el in all_hosts:
             status_el = host_el.find("status")
-            if status_el is None or status_el.get("state") != "up":
+            host_state = status_el.get("state") if status_el is not None else "unknown"
+
+            # Log every host, even down ones
+            addr_els = host_el.findall("address")
+            host_ip = ""
+            for a in addr_els:
+                if a.get("addrtype") == "ipv4":
+                    host_ip = a.get("addr", "")
+            logger.debug("  Host: %s state=%s", host_ip or "(no IP)", host_state)
+
+            if status_el is None or host_state != "up":
+                logger.debug("    -> skipped (not up)")
                 continue
 
-            # IP and MAC addresses
             ip = ""
             mac = ""
             for addr_el in host_el.findall("address"):
@@ -86,15 +120,14 @@ class ActiveScanner:
                     mac = addr_el.get("addr", "")
 
             if not ip:
+                logger.debug("    -> skipped (no IPv4 address)")
                 continue
 
-            # Vendor from MAC address element
             vendor = ""
             for addr_el in host_el.findall("address"):
                 if addr_el.get("addrtype") == "mac" and addr_el.get("vendor"):
                     vendor = addr_el.get("vendor", "")
 
-            # Hostname
             hostname = ""
             hostnames_el = host_el.find("hostnames")
             if hostnames_el is not None:
@@ -104,7 +137,6 @@ class ActiveScanner:
                         hostname = name
                         break
 
-            # Ports and services
             open_ports = []
             services = []
             ports_el = host_el.find("ports")
@@ -120,7 +152,6 @@ class ActiveScanner:
                             if svc_name:
                                 services.append(svc_name)
 
-            # OS detection
             os_match = ""
             os_el = host_el.find("os")
             if os_el is not None:
@@ -147,11 +178,13 @@ class ActiveScanner:
                 "risk_score": 0.0,
             }
             devices.append(device)
+            logger.info("  FOUND DEVICE: %s (%s) type=%s vendor='%s' ports=%s services=%s",
+                        ip, hostname, device_type, vendor, open_ports, services)
 
             if callback:
                 callback(device)
 
-        logger.info("Active scan complete: %d devices found", len(devices))
+        logger.info("=== ACTIVE SCANNER DONE === %d devices found from %d hosts", len(devices), len(all_hosts))
         return devices
 
     def _guess_device_type(self, ports: list[int], services: list[str],

@@ -17,6 +17,7 @@ class Neo4jClient:
 
     def connect(self):
         settings = get_settings()
+        logger.debug("Neo4j connect attempt: uri=%s, user=%s", settings.neo4j_uri, settings.neo4j_user)
         try:
             self._driver = GraphDatabase.driver(
                 settings.neo4j_uri,
@@ -26,7 +27,9 @@ class Neo4jClient:
             self._init_schema()
             logger.info("Connected to Neo4j at %s", settings.neo4j_uri)
         except Exception as e:
-            logger.warning("Neo4j not available: %s. Using in-memory fallback.", e)
+            logger.warning("Neo4j connection FAILED: %s", e)
+            import traceback
+            logger.debug("Neo4j connect traceback:\n%s", traceback.format_exc())
             self._driver = None
 
     def _init_schema(self):
@@ -55,10 +58,21 @@ class Neo4jClient:
 
     def execute_write(self, query: str, params: dict | None = None) -> Any:
         if not self._driver:
+            logger.debug("Neo4j write SKIPPED (no driver): %s", query[:80])
             return None
-        with self._driver.session() as session:
-            result = session.run(query, params or {})
-            return result.consume()
+        try:
+            with self._driver.session() as session:
+                result = session.run(query, params or {})
+                summary = result.consume()
+                logger.debug("Neo4j write OK: nodes_created=%d, rels_created=%d, props_set=%d",
+                             summary.counters.nodes_created, summary.counters.relationships_created,
+                             summary.counters.properties_set)
+                return summary
+        except Exception as e:
+            logger.error("Neo4j write FAILED: %s | query: %s", e, query[:120])
+            import traceback
+            logger.debug("Neo4j write traceback:\n%s", traceback.format_exc())
+            return None
 
     def upsert_device(self, device: dict) -> None:
         query = """

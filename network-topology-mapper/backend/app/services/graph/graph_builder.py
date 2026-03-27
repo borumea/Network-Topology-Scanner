@@ -9,18 +9,25 @@ logger = logging.getLogger(__name__)
 
 class GraphBuilder:
     def upsert_device(self, device: dict) -> bool:
+        logger.debug("GraphBuilder.upsert_device: id=%s ip=%s hostname=%s",
+                     device.get("id"), device.get("ip"), device.get("hostname"))
         existing = neo4j_client.get_device(device["id"])
         is_new = existing is None
+        logger.debug("  -> is_new=%s (existing=%s)", is_new, "found" if existing else "None")
         neo4j_client.upsert_device(device)
 
         if is_new:
             event_bus.publish_device_update("device_added", device)
+            logger.debug("  -> published device_added event")
         else:
             event_bus.publish_device_update("device_update", device)
+            logger.debug("  -> published device_update event")
 
         return is_new
 
     def upsert_connection(self, connection: dict) -> None:
+        logger.debug("GraphBuilder.upsert_connection: %s -> %s",
+                     connection.get("source_id"), connection.get("target_id"))
         neo4j_client.upsert_connection(connection)
         event_bus.publish_connection_change(connection)
 
@@ -54,9 +61,13 @@ class GraphBuilder:
     def get_full_topology(self, layer: str = None, vlan: int = None,
                           subnet: str = None, device_type: str = None,
                           risk_min: float = None) -> dict:
+        logger.debug("get_full_topology called: layer=%s, vlan=%s, subnet=%s, device_type=%s, risk_min=%s",
+                     layer, vlan, subnet, device_type, risk_min)
         devices = neo4j_client.get_all_devices()
         connections = neo4j_client.get_all_connections()
         dependencies = neo4j_client.get_all_dependencies()
+        logger.debug("get_full_topology raw from Neo4j: %d devices, %d connections, %d dependencies",
+                     len(devices), len(connections), len(dependencies))
 
         if layer == "physical":
             device_types = {"router", "switch", "ap", "firewall"}
