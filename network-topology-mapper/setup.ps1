@@ -276,7 +276,7 @@ if (-not $RunOnly) {
     & .venv\Scripts\Activate.ps1
 
     Write-Host "   Installing Python packages (this may take a minute)..."
-    pip install -q -r requirements.txt 2>&1 | Out-Null
+    pip install -q -r requirements.txt
 
     if (-not (Test-Path data)) {
         New-Item -ItemType Directory -Path data | Out-Null
@@ -291,7 +291,11 @@ if (-not $RunOnly) {
 
     if (-not (Test-Path node_modules)) {
         Write-Host "   Installing Node packages (this may take a minute)..."
-        npm install 2>&1 | Out-Null
+        npm install
+        if ($LASTEXITCODE -ne 0) {
+            Write-Err "npm install failed. Try running it manually: cd frontend && npm install"
+            exit 1
+        }
     }
 
     Write-OK "Frontend ready"
