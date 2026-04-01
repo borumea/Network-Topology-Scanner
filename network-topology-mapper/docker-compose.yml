@@ -25,6 +25,7 @@ services:
       - neo4j_data:/data
     ports:
       - "7474:7474"   # Neo4j browser (debug only)
+      - "7687:7687"   # Bolt protocol (bare-metal backend dev)
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
       interval: 10s
@@ -36,6 +37,8 @@ services:
     image: redis:7-alpine
     networks:
       - nts-net
+    ports:
+      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s

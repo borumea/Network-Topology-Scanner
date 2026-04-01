@@ -100,11 +100,18 @@ export const useTopologyStore = create<TopologyState>((set) => ({
     })),
 
   updateConnection: (connection) =>
-    set((state) => ({
-      connections: state.connections.map((c) =>
-        c.id === connection.id ? { ...c, ...connection } : c
-      ),
-    })),
+    set((state) => {
+      const exists = state.connections.some((c) => c.id === connection.id);
+      if (exists) {
+        return {
+          connections: state.connections.map((c) =>
+            c.id === connection.id ? { ...c, ...connection } : c
+          ),
+        };
+      }
+      // Add new connection if it doesn't exist yet
+      return { connections: [...state.connections, connection] };
+    }),
 
   selectDevice: (deviceId) =>
     set({

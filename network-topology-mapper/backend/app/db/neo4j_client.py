@@ -37,9 +37,27 @@ class Neo4jClient:
             return
         with self._driver.session() as session:
             session.run("CREATE INDEX IF NOT EXISTS FOR (d:Device) ON (d.id)")
-            session.run("CREATE INDEX IF NOT EXISTS FOR (d:Device) ON (d.ip)")
             session.run("CREATE INDEX IF NOT EXISTS FOR (v:VLAN) ON (v.vlan_id)")
-            session.run("CREATE CONSTRAINT IF NOT EXISTS FOR (d:Device) REQUIRE d.ip IS UNIQUE")
+
+            # A plain index on Device.ip conflicts with a UNIQUE constraint on the
+            # same property.  Drop any plain index first, then create the constraint.
+            try:
+                rows = session.run(
+                    "SHOW INDEXES YIELD name, type, labelsOrTypes, properties "
+                    "WHERE labelsOrTypes = ['Device'] AND properties = ['ip'] "
+                    "AND type <> 'UNIQUENESS' RETURN name"
+                ).data()
+                for row in rows:
+                    session.run(f"DROP INDEX {row['name']}")
+                    logger.info("Dropped legacy plain index '%s' on Device.ip", row["name"])
+            except Exception as e:
+                logger.debug("Index cleanup check: %s", e)
+
+            try:
+                session.run("CREATE CONSTRAINT IF NOT EXISTS FOR (d:Device) REQUIRE d.ip IS UNIQUE")
+            except Exception as e:
+                logger.warning("Could not create ip uniqueness constraint: %s", e)
+                session.run("CREATE INDEX IF NOT EXISTS FOR (d:Device) ON (d.ip)")
 
     @property
     def available(self) -> bool:
@@ -74,12 +92,16 @@ class Neo4jClient:
             logger.debug("Neo4j write traceback:\n%s", traceback.format_exc())
             return None
 
+    def _clean_props(self, data: dict) -> dict:
+        """Remove None values and non-storable types — Neo4j rejects nulls in SET += maps."""
+        return {k: v for k, v in data.items() if v is not None}
+
     def upsert_device(self, device: dict) -> None:
         query = """
         MERGE (d:Device {id: $id})
         SET d += $props
         """
-        self.execute_write(query, {"id": device["id"], "props": device})
+        self.execute_write(query, {"id": device["id"], "props": self._clean_props(device)})
 
     def upsert_connection(self, conn: dict) -> None:
         query = """
@@ -92,7 +114,7 @@ class Neo4jClient:
             "source_id": conn["source_id"],
             "target_id": conn["target_id"],
             "id": conn["id"],
-            "props": {k: v for k, v in conn.items() if k not in ("source_id", "target_id")},
+            "props": self._clean_props({k: v for k, v in conn.items() if k not in ("source_id", "target_id")}),
         })
 
     def upsert_dependency(self, dep: dict) -> None:
@@ -106,7 +128,7 @@ class Neo4jClient:
             "source_id": dep["source_id"],
             "target_id": dep["target_id"],
             "id": dep["id"],
-            "props": {k: v for k, v in dep.items() if k not in ("source_id", "target_id")},
+            "props": self._clean_props({k: v for k, v in dep.items() if k not in ("source_id", "target_id")}),
         })
 
     def get_all_devices(self) -> list[dict]:

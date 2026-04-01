@@ -1,5 +1,36 @@
+import logging
+import socket
+import struct
+
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+
+logger = logging.getLogger(__name__)
+
+
+def _detect_local_subnet() -> str:
+    """Detect the local machine's subnet (e.g. '192.168.1.0/24').
+
+    Works cross-platform by connecting a UDP socket to a public IP
+    (no traffic sent) to discover the default outbound interface IP,
+    then uses /24 as the mask (correct for most home/small-office nets).
+    """
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(0.1)
+        # Connect to a public IP — no data is actually sent
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+
+        # Derive /24 network address from the local IP
+        parts = local_ip.split(".")
+        network = f"{parts[0]}.{parts[1]}.{parts[2]}.0/24"
+        logger.info("Auto-detected local subnet: %s (from local IP %s)", network, local_ip)
+        return network
+    except Exception as e:
+        logger.warning("Could not auto-detect subnet: %s — falling back to 192.168.1.0/24", e)
+        return "192.168.1.0/24"
 
 
 class Settings(BaseSettings):
@@ -14,8 +45,8 @@ class Settings(BaseSettings):
     # SQLite
     sqlite_path: str = "./data/mapper.db"
 
-    # Scanning
-    scan_default_range: str = "192.168.1.0/24"
+    # Scanning — empty string means "auto-detect at startup"
+    scan_default_range: str = ""
     scan_rate_limit: int = 1000
     scan_passive_interface: str = ""  # empty = auto-detect via Scapy
     snmp_community: str = "public"
@@ -54,4 +85,8 @@ class Settings(BaseSettings):
 
 @lru_cache()
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    # Auto-detect subnet if not explicitly configured
+    if not settings.scan_default_range:
+        settings.scan_default_range = _detect_local_subnet()
+    return settings
