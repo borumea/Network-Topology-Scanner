@@ -2,14 +2,14 @@ import logging
 from typing import Any
 import networkx as nx
 
-from app.db.neo4j_client import neo4j_client
+from app.db.topology_db import topology_db
 
 logger = logging.getLogger(__name__)
 
 
 class PathAnalyzer:
     def _build_networkx_graph(self) -> nx.Graph:
-        topology = neo4j_client.get_topology()
+        topology = topology_db.get_topology()
         G = nx.Graph()
         for device in topology["devices"]:
             G.add_node(device["id"], **device)

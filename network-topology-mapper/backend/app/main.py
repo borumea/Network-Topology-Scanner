@@ -1,12 +1,14 @@
 import asyncio
 import logging
 import json
+import os
+import sys
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.db.neo4j_client import neo4j_client
+from app.db.topology_db import topology_db
 from app.db.sqlite_db import sqlite_db
 from app.db.redis_client import redis_client
 from app.services.realtime.ws_manager import ws_manager
@@ -14,52 +16,27 @@ from app.services.realtime.event_bus import event_bus
 from app.routers import topology, scans, simulation, alerts, reports, snapshots
 from app.routers import settings as settings_router
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
+# --- Logging setup: console + file ---
+os.makedirs("data", exist_ok=True)
+LOG_FILE = os.path.join("data", "nts-debug.log")
+
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.DEBUG)
+
+# Console: INFO and above
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+root_logger.addHandler(console_handler)
+
+# File: DEBUG and above (everything)
+file_handler = logging.FileHandler(LOG_FILE, mode="w", encoding="utf-8")
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s (%(filename)s:%(lineno)d): %(message)s"))
+root_logger.addHandler(file_handler)
+
 logger = logging.getLogger(__name__)
-
-
-def load_mock_data():
-    """Load mock data if Neo4j is empty or unavailable."""
-    from app.services.mock_data import generate_mock_topology, generate_mock_alerts, generate_mock_scans
-
-    mock = generate_mock_topology()
-    mock_alerts = generate_mock_alerts()
-    mock_scans = generate_mock_scans()
-
-    if neo4j_client.available:
-        # Clear old data and load fresh mock data
-        logger.info("Clearing Neo4j and loading mock data...")
-        neo4j_client.clear_all()
-        from app.services.graph.graph_builder import graph_builder
-        graph_builder.bulk_upsert(
-            mock["devices"], mock["connections"], mock.get("dependencies", [])
-        )
-        logger.info("Mock data loaded: %d devices, %d connections",
-                    len(mock["devices"]), len(mock["connections"]))
-    else:
-        logger.info("Neo4j unavailable. Mock data stored in memory.")
-
-    # Load mock alerts and scans into SQLite
-    for alert in mock_alerts:
-        try:
-            sqlite_db.create_alert(alert)
-        except Exception:
-            pass
-
-    for scan in mock_scans:
-        try:
-            sqlite_db.create_scan(scan)
-        except Exception:
-            pass
-
-    return mock
-
-
-# Global mock storage for when Neo4j is unavailable
-_mock_topology = None
+logger.info("=== NTS DEBUG LOG START === Log file: %s", os.path.abspath(LOG_FILE))
 
 
 async def _scheduled_scan_loop(interval_seconds: int):
@@ -80,17 +57,41 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     logger.info("Starting Network Topology Mapper...")
 
+    # Dump ALL settings for debugging
+    logger.debug("=== CONFIGURATION DUMP ===")
+    logger.debug("  redis_url:              %s", settings.redis_url)
+    logger.debug("  sqlite_path:            %s", settings.sqlite_path)
+    logger.debug("  scan_default_range:     %s", settings.scan_default_range)
+    logger.debug("  scan_rate_limit:        %d", settings.scan_rate_limit)
+    logger.debug("  scan_passive_interface: '%s'", settings.scan_passive_interface)
+    logger.debug("  enable_active_scan:     %s", settings.enable_active_scan)
+    logger.debug("  enable_passive_scan:    %s", settings.enable_passive_scan)
+    logger.debug("  enable_snmp_scan:       %s", settings.enable_snmp_scan)
+    logger.debug("  snmp_community:         %s", settings.snmp_community)
+    logger.debug("  ssh_username:           '%s'", settings.ssh_username)
+    logger.debug("  scan_interval_minutes:  %d", settings.scan_interval_minutes)
+    logger.debug("  app_host:               %s", settings.app_host)
+    logger.debug("  app_port:               %d", settings.app_port)
+    logger.debug("  log_level:              %s", settings.log_level)
+    logger.debug("  agent_mode:             %s", settings.agent_mode)
+    logger.debug("  CWD:                    %s", os.getcwd())
+    logger.debug("  Python:                 %s", sys.version)
+    logger.debug("=== END CONFIG DUMP ===")
+
     # Store event loop for thread-safe WebSocket broadcasts
     event_bus.set_loop(asyncio.get_event_loop())
 
     # Initialize databases
-    neo4j_client.connect()
+    logger.debug("Connecting to SQLite...")
     sqlite_db.connect()
+    logger.debug("Connecting to TopologyDB...")
+    topology_db.connect()
+    logger.debug("Connecting to Redis...")
     redis_client.connect()
 
-    # Load mock data into Neo4j so the UI has something to display
-    global _mock_topology
-    _mock_topology = load_mock_data()
+    device_count = len(topology_db.get_all_devices())
+    logger.info("Database status: topology_db=connected (%d devices), redis=%s, sqlite=connected",
+                device_count, redis_client.available)
 
     # Start scheduled scan loop if configured
     _scan_task = None
@@ -104,7 +105,7 @@ async def lifespan(app: FastAPI):
     # Cleanup
     if _scan_task:
         _scan_task.cancel()
-    neo4j_client.close()
+    topology_db.close()
     sqlite_db.close()
     redis_client.close()
     logger.info("Network Topology Mapper stopped.")
@@ -146,7 +147,7 @@ def health():
     settings = get_settings()
     return {
         "status": "ok",
-        "neo4j": neo4j_client.available,
+        "topology_db": topology_db.available,
         "redis": redis_client.available,
         "websocket_clients": ws_manager.connection_count,
         "snapshot_count": sqlite_db.get_snapshot_count(),
@@ -178,64 +179,3 @@ async def websocket_topology(websocket: WebSocket):
     except Exception as e:
         logger.error("WebSocket error: %s", e)
         ws_manager.disconnect(websocket)
-
-
-# Override graph_builder to use mock data when Neo4j unavailable
-_original_get_full_topology = None
-
-
-def _patched_get_full_topology(layer=None, vlan=None, subnet=None,
-                                device_type=None, risk_min=None):
-    global _mock_topology
-    if not neo4j_client.available and _mock_topology:
-        from app.services.graph.graph_builder import GraphBuilder
-        devices = list(_mock_topology.get("devices", []))
-        connections = list(_mock_topology.get("connections", []))
-        dependencies = list(_mock_topology.get("dependencies", []))
-
-        if layer == "physical":
-            phys_types = {"router", "switch", "ap", "firewall"}
-            conn_types = {"ethernet", "fiber", "wireless"}
-            devices = [d for d in devices if d.get("device_type") in phys_types]
-            device_ids = {d["id"] for d in devices}
-            connections = [c for c in connections
-                          if c.get("connection_type") in conn_types
-                          and c.get("source_id") in device_ids
-                          and c.get("target_id") in device_ids]
-            dependencies = []
-        elif layer == "application":
-            app_types = {"server", "firewall"}
-            devices = [d for d in devices if d.get("device_type") in app_types]
-            device_ids = {d["id"] for d in devices}
-            connections = [c for c in connections
-                          if c.get("source_id") in device_ids and c.get("target_id") in device_ids]
-
-        if vlan is not None:
-            devices = [d for d in devices if vlan in d.get("vlan_ids", [])]
-        if subnet:
-            devices = [d for d in devices if d.get("subnet") == subnet]
-        if device_type:
-            devices = [d for d in devices if d.get("device_type") == device_type]
-        if risk_min is not None:
-            devices = [d for d in devices if d.get("risk_score", 0) >= risk_min]
-
-        device_ids = {d["id"] for d in devices}
-        connections = [c for c in connections
-                       if c.get("source_id") in device_ids and c.get("target_id") in device_ids]
-        dependencies = [dep for dep in dependencies
-                        if dep.get("source_id") in device_ids and dep.get("target_id") in device_ids]
-
-        return {"devices": devices, "connections": connections, "dependencies": dependencies}
-
-    return _original_get_full_topology(layer, vlan, subnet, device_type, risk_min)
-
-
-def _patch_graph_builder():
-    global _original_get_full_topology
-    from app.services.graph.graph_builder import graph_builder
-    _original_get_full_topology = graph_builder.get_full_topology
-    graph_builder.get_full_topology = _patched_get_full_topology
-
-
-# Apply the patch after import
-_patch_graph_builder()

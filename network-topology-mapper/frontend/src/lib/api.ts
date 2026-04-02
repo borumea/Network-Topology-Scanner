@@ -19,6 +19,9 @@ export const fetchTopology = (params?: Record<string, string>) => {
 
 export const fetchTopologyStats = () => request<any>('/topology/stats');
 
+export const clearTopology = () =>
+  request<any>('/topology/clear', { method: 'POST' });
+
 export const fetchDevice = (id: string) => request<any>(`/devices/${id}`);
 
 export const fetchDeviceConnections = (id: string) =>
@@ -73,6 +76,9 @@ export const fetchChangelog = (from?: string, to?: string) => {
   if (to) params.to = to;
   return request<any>(`/reports/changelog?${new URLSearchParams(params)}`);
 };
+
+// Settings
+export const fetchSettings = () => request<any>('/settings');
 
 // Health
 export const fetchHealth = () => request<any>('/health');

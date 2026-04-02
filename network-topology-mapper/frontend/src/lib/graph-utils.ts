@@ -64,11 +64,15 @@ export function truncate(str: string, max: number = 16): string {
 
 export function formatTimeAgo(dateStr: string): string {
   if (!dateStr) return 'unknown';
-  const date = new Date(dateStr);
+  // Backend stores UTC timestamps without a Z suffix — append it so
+  // the browser parses them as UTC instead of local time.
+  const normalized = dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr + 'Z';
+  const date = new Date(normalized);
   const now = new Date();
   const diff = now.getTime() - date.getTime();
 
   const seconds = Math.floor(diff / 1000);
+  if (seconds < 0) return 'just now';
   if (seconds < 60) return `${seconds}s ago`;
 
   const minutes = Math.floor(seconds / 60);

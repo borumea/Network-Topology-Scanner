@@ -2,7 +2,7 @@ from fastapi import APIRouter, Query
 from typing import Optional
 
 from app.services.graph.graph_builder import graph_builder
-from app.db.neo4j_client import neo4j_client
+from app.db.topology_db import topology_db
 from app.services.graph.resilience_scorer import resilience_scorer
 
 router = APIRouter(prefix="/api", tags=["topology"])
@@ -66,9 +66,15 @@ def get_topology_stats():
     }
 
 
+@router.post("/topology/clear")
+def clear_topology():
+    topology_db.clear_all()
+    return {"status": "ok", "message": "All devices, connections, and dependencies cleared."}
+
+
 @router.get("/devices/{device_id}")
 def get_device(device_id: str):
-    device = neo4j_client.get_device(device_id)
+    device = topology_db.get_device(device_id)
     if not device:
         # Search in topology
         topology = graph_builder.get_full_topology()
