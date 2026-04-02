@@ -8,7 +8,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.db.neo4j_client import neo4j_client
+from app.db.topology_db import topology_db
 from app.db.sqlite_db import sqlite_db
 from app.db.redis_client import redis_client
 from app.services.realtime.ws_manager import ws_manager
@@ -59,9 +59,6 @@ async def lifespan(app: FastAPI):
 
     # Dump ALL settings for debugging
     logger.debug("=== CONFIGURATION DUMP ===")
-    logger.debug("  neo4j_uri:              %s", settings.neo4j_uri)
-    logger.debug("  neo4j_user:             %s", settings.neo4j_user)
-    logger.debug("  neo4j_password:         %s", "***" if settings.neo4j_password else "(empty)")
     logger.debug("  redis_url:              %s", settings.redis_url)
     logger.debug("  sqlite_path:            %s", settings.sqlite_path)
     logger.debug("  scan_default_range:     %s", settings.scan_default_range)
@@ -85,23 +82,16 @@ async def lifespan(app: FastAPI):
     event_bus.set_loop(asyncio.get_event_loop())
 
     # Initialize databases
-    logger.debug("Connecting to Neo4j...")
-    neo4j_client.connect()
     logger.debug("Connecting to SQLite...")
     sqlite_db.connect()
+    logger.debug("Connecting to TopologyDB...")
+    topology_db.connect()
     logger.debug("Connecting to Redis...")
     redis_client.connect()
 
-    logger.info("Database status: neo4j=%s, redis=%s, sqlite=connected", neo4j_client.available, redis_client.available)
-
-    if neo4j_client.available:
-        device_count = neo4j_client.execute_read(
-            "MATCH (d:Device) RETURN count(d) AS cnt"
-        )
-        cnt = device_count[0]["cnt"] if device_count else 0
-        logger.info("Neo4j available with %d devices.", cnt)
-    else:
-        logger.warning("NEO4J IS NOT AVAILABLE. Scans will not persist. Check NEO4J_URI and that the DBMS is started.")
+    device_count = len(topology_db.get_all_devices())
+    logger.info("Database status: topology_db=connected (%d devices), redis=%s, sqlite=connected",
+                device_count, redis_client.available)
 
     # Start scheduled scan loop if configured
     _scan_task = None
@@ -115,7 +105,7 @@ async def lifespan(app: FastAPI):
     # Cleanup
     if _scan_task:
         _scan_task.cancel()
-    neo4j_client.close()
+    topology_db.close()
     sqlite_db.close()
     redis_client.close()
     logger.info("Network Topology Mapper stopped.")
@@ -157,7 +147,7 @@ def health():
     settings = get_settings()
     return {
         "status": "ok",
-        "neo4j": neo4j_client.available,
+        "topology_db": topology_db.available,
         "redis": redis_client.available,
         "websocket_clients": ws_manager.connection_count,
         "snapshot_count": sqlite_db.get_snapshot_count(),

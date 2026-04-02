@@ -146,6 +146,7 @@ export interface ScanProgress {
   percent: number;
   phase: string;
   devices_found: number;
+  log_messages?: string[];
 }
 
 export interface SPOF {

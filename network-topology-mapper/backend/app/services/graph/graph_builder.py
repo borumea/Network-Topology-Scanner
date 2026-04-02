@@ -1,7 +1,7 @@
 import logging
 from typing import Any
 
-from app.db.neo4j_client import neo4j_client
+from app.db.topology_db import topology_db
 from app.services.realtime.event_bus import event_bus
 
 logger = logging.getLogger(__name__)
@@ -11,10 +11,10 @@ class GraphBuilder:
     def upsert_device(self, device: dict) -> bool:
         logger.debug("GraphBuilder.upsert_device: id=%s ip=%s hostname=%s",
                      device.get("id"), device.get("ip"), device.get("hostname"))
-        existing = neo4j_client.get_device(device["id"])
+        existing = topology_db.get_device(device["id"])
         is_new = existing is None
         logger.debug("  -> is_new=%s (existing=%s)", is_new, "found" if existing else "None")
-        neo4j_client.upsert_device(device)
+        topology_db.upsert_device(device)
 
         if is_new:
             event_bus.publish_device_update("device_added", device)
@@ -28,17 +28,14 @@ class GraphBuilder:
     def upsert_connection(self, connection: dict) -> None:
         logger.debug("GraphBuilder.upsert_connection: %s -> %s",
                      connection.get("source_id"), connection.get("target_id"))
-        neo4j_client.upsert_connection(connection)
+        topology_db.upsert_connection(connection)
         event_bus.publish_connection_change(connection)
 
     def upsert_dependency(self, dependency: dict) -> None:
-        neo4j_client.upsert_dependency(dependency)
+        topology_db.upsert_dependency(dependency)
 
     def remove_device(self, device_id: str) -> None:
-        neo4j_client.execute_write(
-            "MATCH (d:Device {id: $id}) DETACH DELETE d",
-            {"id": device_id}
-        )
+        topology_db.delete_device(device_id)
         event_bus.publish_device_update("device_removed", {"id": device_id})
 
     def bulk_upsert(self, devices: list[dict], connections: list[dict],
@@ -63,10 +60,10 @@ class GraphBuilder:
                           risk_min: float = None) -> dict:
         logger.debug("get_full_topology called: layer=%s, vlan=%s, subnet=%s, device_type=%s, risk_min=%s",
                      layer, vlan, subnet, device_type, risk_min)
-        devices = neo4j_client.get_all_devices()
-        connections = neo4j_client.get_all_connections()
-        dependencies = neo4j_client.get_all_dependencies()
-        logger.debug("get_full_topology raw from Neo4j: %d devices, %d connections, %d dependencies",
+        devices = topology_db.get_all_devices()
+        connections = topology_db.get_all_connections()
+        dependencies = topology_db.get_all_dependencies()
+        logger.debug("get_full_topology raw from DB: %d devices, %d connections, %d dependencies",
                      len(devices), len(connections), len(dependencies))
 
         if layer == "physical":

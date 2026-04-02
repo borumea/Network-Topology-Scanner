@@ -46,7 +46,7 @@ export function useTopology() {
     const handleScanProgress = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail?.phase === 'completed' || detail?.percent >= 100) {
-        // Small delay to let Neo4j finish writing
+        // Small delay to let the DB finish writing
         if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
         reloadTimerRef.current = window.setTimeout(() => {
           loadTopology();
