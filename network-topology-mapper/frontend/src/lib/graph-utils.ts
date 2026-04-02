@@ -1,29 +1,31 @@
 import type { DeviceType, ConnectionType, DeviceStatus } from '../types/topology';
 
+// Nothing light-mode: monochrome nodes. Device types differentiated by shape/icon,
+// not fill color. These are used only for the minimap dots and legend.
 export const DEVICE_TYPE_COLORS: Record<DeviceType, string> = {
-  router: '#818CF8', // Indigo-400
-  switch: '#60A5FA', // Blue-400
-  server: '#34D399', // Emerald-400
-  firewall: '#FBBF24', // Amber-400
-  ap: '#A78BFA', // Violet-400
-  workstation: '#94A3B8', // Slate-400
-  iot: '#F472B6', // Pink-400
-  printer: '#FB923C', // Orange-400
-  unknown: '#6B7280', // Gray-500
+  router: '#1A1A1A',
+  switch: '#333333',
+  server: '#4D4D4D',
+  firewall: '#1A1A1A',
+  ap: '#666666',
+  workstation: '#808080',
+  iot: '#999999',
+  printer: '#808080',
+  unknown: '#CCCCCC',
 };
 
 export const STATUS_COLORS: Record<DeviceStatus, string> = {
-  online: '#34D399', // Emerald-400
-  offline: '#F87171', // Red-400
-  degraded: '#FBBF24', // Amber-400
+  online: '#4A9E5C',
+  offline: '#D71921',
+  degraded: '#D4A843',
 };
 
 export const CONNECTION_TYPE_COLORS: Record<ConnectionType, string> = {
-  ethernet: '#475569', // Slate-600
-  fiber: '#818CF8', // Indigo-400
-  wireless: '#A78BFA', // Violet-400
-  vpn: '#FBBF24', // Amber-400
-  virtual: '#94A3B8', // Slate-400
+  ethernet: '#CCCCCC',
+  fiber: '#999999',
+  wireless: '#CCCCCC',
+  vpn: '#CCCCCC',
+  virtual: '#CCCCCC',
 };
 
 export const CONNECTION_TYPE_STYLES: Record<ConnectionType, string> = {
@@ -35,10 +37,10 @@ export const CONNECTION_TYPE_STYLES: Record<ConnectionType, string> = {
 };
 
 export function getRiskColor(score: number): string {
-  if (score < 0.3) return '#34D399';
-  if (score < 0.6) return '#FBBF24';
-  if (score < 0.8) return '#FB923C';
-  return '#F87171';
+  if (score < 0.3) return '#4A9E5C';
+  if (score < 0.6) return '#D4A843';
+  if (score < 0.8) return '#D4A843';
+  return '#D71921';
 }
 
 export function getRiskLabel(score: number): string {
@@ -64,8 +66,6 @@ export function truncate(str: string, max: number = 16): string {
 
 export function formatTimeAgo(dateStr: string): string {
   if (!dateStr) return 'unknown';
-  // Backend stores UTC timestamps without a Z suffix — append it so
-  // the browser parses them as UTC instead of local time.
   const normalized = dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr + 'Z';
   const date = new Date(normalized);
   const now = new Date();
@@ -99,22 +99,22 @@ export function formatDate(dateStr: string): string {
 
 export function getSeverityColor(severity: string): string {
   switch (severity) {
-    case 'critical': return '#EF4444';
-    case 'high': return '#F97316';
-    case 'medium': return '#F59E0B';
-    case 'low': return '#3B82F6';
-    case 'info': return '#6B7280';
-    default: return '#6B7280';
+    case 'critical': return '#D71921';
+    case 'high': return '#D71921';
+    case 'medium': return '#D4A843';
+    case 'low': return '#666666';
+    case 'info': return '#999999';
+    default: return '#999999';
   }
 }
 
 export function getSeverityIcon(severity: string): string {
   switch (severity) {
-    case 'critical': return '🔴';
-    case 'high': return '🟠';
-    case 'medium': return '🟡';
-    case 'low': return '🔵';
-    case 'info': return '⚪';
-    default: return '⚪';
+    case 'critical': return '\u25CF';  // filled circle
+    case 'high': return '\u25CF';
+    case 'medium': return '\u25CB';    // open circle
+    case 'low': return '\u25CB';
+    case 'info': return '\u25CB';
+    default: return '\u25CB';
   }
 }

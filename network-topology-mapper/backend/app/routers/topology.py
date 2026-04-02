@@ -66,6 +66,15 @@ def get_topology_stats():
     }
 
 
+@router.post("/topology/import")
+def import_topology(payload: dict):
+    devices = payload.get("devices", [])
+    connections = payload.get("connections", [])
+    dependencies = payload.get("dependencies", [])
+    result = graph_builder.bulk_upsert(devices, connections, dependencies)
+    return result
+
+
 @router.post("/topology/clear")
 def clear_topology():
     topology_db.clear_all()
