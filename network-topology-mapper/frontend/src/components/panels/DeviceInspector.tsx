@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { X, ExternalLink, AlertTriangle, Zap, Route, FileText } from 'lucide-react';
+import { X, Zap, Route } from 'lucide-react';
 import { useTopologyStore } from '../../stores/topologyStore';
 import { fetchDevice, fetchDeviceDependencies } from '../../lib/api';
 import DeviceIcon from '../shared/DeviceIcon';
@@ -22,11 +22,9 @@ export default function DeviceInspector() {
       return;
     }
 
-    // First try local store
     const local = devices.find((d) => d.id === selectedDeviceId);
     if (local) setDevice(local);
 
-    // Then fetch full details from API
     fetchDevice(selectedDeviceId)
       .then((d) => { if (d && !d.error) setDevice(d); })
       .catch(() => {});
@@ -55,28 +53,29 @@ export default function DeviceInspector() {
   };
 
   return (
-    <div className="w-[380px] h-full bg-bg-secondary border-l border-bg-tertiary overflow-y-auto animate-slide-in-right">
-      <div className="sticky top-0 bg-bg-secondary border-b border-bg-tertiary px-4 py-3 flex items-center justify-between z-10">
-        <span className="text-sm font-semibold text-text-primary">Device Inspector</span>
+    <div className="w-[380px] flex-shrink-0 h-full bg-nd-surface border-l border-nd-border overflow-y-auto animate-fade-in">
+      {/* Header */}
+      <div className="sticky top-0 bg-nd-surface border-b border-nd-border px-4 py-3 flex items-center justify-between z-10">
+        <span className="font-mono text-label uppercase tracking-[0.08em] text-nd-text-secondary">Device Inspector</span>
         <button
           onClick={() => selectDevice(null)}
-          className="text-text-muted hover:text-text-primary transition-colors"
+          className="text-nd-text-disabled hover:text-nd-text-primary transition-colors"
         >
-          <X size={16} />
+          <X size={16} strokeWidth={1.5} />
         </button>
       </div>
 
-      <div className="p-4 space-y-4">
-        {/* Header */}
+      <div className="p-4 space-y-5">
+        {/* Device identity header */}
         <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-lg bg-bg-tertiary flex items-center justify-center flex-shrink-0">
+          <div className="w-10 h-10 rounded-nd-compact bg-nd-surface-raised border border-nd-border flex items-center justify-center flex-shrink-0">
             <DeviceIcon type={device.device_type} size={22} />
           </div>
           <div>
-            <h3 className="text-base font-semibold text-text-primary">
+            <h3 className="text-subheading font-sans font-medium text-nd-text-display">
               {device.hostname || device.ip}
             </h3>
-            <p className="text-xs text-text-secondary">
+            <p className="font-mono text-caption text-nd-text-secondary">
               {device.vendor} {device.model}
               {device.os && ` \u00b7 ${device.os}`}
             </p>
@@ -87,15 +86,14 @@ export default function DeviceInspector() {
         </div>
 
         {/* Risk Score */}
-        <div className="bg-bg-tertiary rounded-lg p-3">
-          <div className="text-xs text-text-muted mb-2">Risk Score</div>
+        <div className="bg-nd-surface-raised rounded-nd-compact p-3 border border-nd-border">
+          <div className="font-mono text-label uppercase tracking-[0.08em] text-nd-text-disabled mb-2">Risk Score</div>
           <RiskScore score={device.risk_score} size="md" />
           {device.risk_details?.factors && device.risk_details.factors.length > 0 && (
-            <div className="mt-2 text-xs text-text-muted">
-              {device.risk_details.factors.map((f, i) => (
-                <div key={i} className="flex items-start gap-1 mt-0.5">
-                  <AlertTriangle size={10} className="flex-shrink-0 mt-0.5 text-risk-medium" />
-                  <span>{f}</span>
+            <div className="mt-2 space-y-0.5">
+              {device.risk_details.factors.map((f: string, i: number) => (
+                <div key={i} className="font-mono text-caption text-nd-text-secondary">
+                  {'\u2022'} {f}
                 </div>
               ))}
             </div>
@@ -108,8 +106,8 @@ export default function DeviceInspector() {
           <InfoRow label="MAC" value={device.mac} />
           <InfoRow label="Vendor" value={device.vendor} />
           <InfoRow label="Type" value={device.device_type} />
-          <InfoRow label="First seen" value={formatDate(device.first_seen)} />
-          <InfoRow label="Last seen" value={formatTimeAgo(device.last_seen)} />
+          <InfoRow label="First Seen" value={formatDate(device.first_seen)} />
+          <InfoRow label="Last Seen" value={formatTimeAgo(device.last_seen)} />
           <InfoRow label="Discovery" value={device.discovery_method} />
         </Section>
 
@@ -127,14 +125,36 @@ export default function DeviceInspector() {
           <Section title="Open Ports">
             <div className="space-y-1">
               {device.open_ports.map((port, i) => (
-                <div key={port} className="flex items-center justify-between text-xs">
-                  <span className="text-text-primary font-mono">{port}/tcp</span>
-                  <span className="text-text-secondary">
+                <div key={port} className="flex items-center justify-between">
+                  <span className="font-mono text-caption text-nd-text-primary">{port}/tcp</span>
+                  <span className="font-mono text-caption text-nd-text-secondary">
                     {device.services[i] || 'unknown'}
                   </span>
-                  <span className="text-status-online text-[10px]">open</span>
+                  <span className="font-mono text-label uppercase text-nd-success">open</span>
                 </div>
               ))}
+            </div>
+          </Section>
+        )}
+
+        {/* Connected Devices */}
+        {deviceConns.length > 0 && (
+          <Section title={`Connected To (${deviceConns.length})`}>
+            <div className="space-y-1">
+              {deviceConns.map((conn) => {
+                const peerId = conn.source_id === device.id ? conn.target_id : conn.source_id;
+                const peer = devices.find((d) => d.id === peerId);
+                return (
+                  <button
+                    key={conn.id}
+                    onClick={() => selectDevice(peerId)}
+                    className="w-full flex items-center justify-between py-1 border-b border-nd-border last:border-0 hover:bg-nd-surface-raised transition-colors text-left"
+                  >
+                    <span className="font-mono text-caption text-nd-text-primary">{peer?.hostname || peer?.ip || peerId.slice(0, 12)}</span>
+                    <span className="font-mono text-label uppercase text-nd-text-disabled">{conn.connection_type}</span>
+                  </button>
+                );
+              })}
             </div>
           </Section>
         )}
@@ -144,21 +164,21 @@ export default function DeviceInspector() {
           {deps.depends_on.length > 0 && (
             <div className="space-y-1">
               {deps.depends_on.map((dep) => (
-                <div key={dep.id} className="text-xs text-text-secondary">
-                  <span className="text-text-muted mr-1">\u2191</span>
+                <div key={dep.id} className="font-mono text-caption text-nd-text-secondary">
+                  <span className="text-nd-text-disabled mr-1">{'\u2191'}</span>
                   Depends on: {dep.target_id.slice(0, 8)} ({dep.dependency_type})
                 </div>
               ))}
             </div>
           )}
           {deps.depended_by.length > 0 && (
-            <div className="text-xs text-text-secondary mt-1">
-              <span className="text-text-muted mr-1">\u2193</span>
+            <div className="font-mono text-caption text-nd-text-secondary mt-1">
+              <span className="text-nd-text-disabled mr-1">{'\u2193'}</span>
               {deps.depended_by.length} devices depend on this
             </div>
           )}
           {deps.depends_on.length === 0 && deps.depended_by.length === 0 && (
-            <div className="text-xs text-text-muted">No dependencies tracked</div>
+            <div className="font-mono text-caption text-nd-text-disabled">No dependencies tracked</div>
           )}
         </Section>
 
@@ -166,16 +186,16 @@ export default function DeviceInspector() {
         <div className="flex flex-wrap gap-2 pt-2">
           <button
             onClick={handleSimulate}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-risk-critical/10 text-risk-critical text-xs font-medium hover:bg-risk-critical/20 transition-colors"
+            className="flex items-center gap-1.5 px-4 py-1.5 rounded-nd-pill border border-nd-accent font-mono text-label uppercase tracking-[0.06em] text-nd-accent hover:bg-nd-accent/10 transition-colors"
           >
-            <Zap size={12} />
+            <Zap size={12} strokeWidth={1.5} />
             Simulate Failure
           </button>
           <button
             onClick={() => setCurrentView('topology')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-tertiary text-text-secondary text-xs font-medium hover:text-text-primary transition-colors"
+            className="flex items-center gap-1.5 px-4 py-1.5 rounded-nd-pill border border-nd-border-visible font-mono text-label uppercase tracking-[0.06em] text-nd-text-secondary hover:text-nd-text-primary hover:border-nd-text-disabled transition-colors"
           >
-            <Route size={12} />
+            <Route size={12} strokeWidth={1.5} />
             Show Paths
           </button>
         </div>
@@ -187,7 +207,7 @@ export default function DeviceInspector() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[10px] text-text-muted uppercase tracking-wider mb-2 border-b border-bg-tertiary pb-1">
+      <div className="font-mono text-label uppercase tracking-[0.08em] text-nd-text-disabled mb-2 border-b border-nd-border pb-1">
         {title}
       </div>
       {children}
@@ -197,9 +217,9 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between py-0.5 text-xs">
-      <span className="text-text-muted">{label}</span>
-      <span className="text-text-secondary font-mono text-right max-w-[200px] truncate">{value}</span>
+    <div className="flex justify-between py-0.5">
+      <span className="font-mono text-label uppercase tracking-[0.08em] text-nd-text-disabled">{label}</span>
+      <span className="font-mono text-caption text-nd-text-primary text-right max-w-[200px] truncate">{value}</span>
     </div>
   );
 }

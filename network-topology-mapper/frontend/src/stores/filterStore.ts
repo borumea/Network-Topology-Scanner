@@ -31,8 +31,8 @@ interface FilterState {
 }
 
 export const useFilterStore = create<FilterState>((set) => ({
-  activeLayer: 'physical',
-  activeLayout: 'dagre',
+  activeLayer: 'logical',
+  activeLayout: 'cola',
   deviceTypeFilter: [],
   statusFilter: [],
   vlanFilter: [],

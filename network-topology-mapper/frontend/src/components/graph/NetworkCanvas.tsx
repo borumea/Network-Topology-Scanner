@@ -5,11 +5,10 @@ import dagre from 'cytoscape-dagre';
 import { useTopologyStore } from '../../stores/topologyStore';
 import { useFilterStore } from '../../stores/filterStore';
 import { cytoscapeStylesheet, getLayoutOptions } from '../../lib/cytoscape-config';
-import { DEVICE_TYPE_COLORS, truncate } from '../../lib/graph-utils';
+import { truncate } from '../../lib/graph-utils';
 import GraphControls from './GraphControls';
 import LayerToggle from './LayerToggle';
 import MiniMap from './MiniMap';
-import NodeTooltip from './NodeTooltip';
 
 try { cytoscape.use(cola); } catch {}
 try { cytoscape.use(dagre); } catch {}
@@ -17,12 +16,11 @@ try { cytoscape.use(dagre); } catch {}
 export default function NetworkCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
-  const tooltipRef = useRef<{ deviceId: string; x: number; y: number } | null>(null);
   const [cyReady, setCyReady] = useState(0);
 
   const {
     devices, connections, dependencies,
-    selectedDeviceId, selectDevice,
+    selectedDeviceId, selectDevice, setRightPanelContent,
     simulationActive, simulationResult,
     spofs,
   } = useTopologyStore();
@@ -41,47 +39,38 @@ export default function NetworkCanvas() {
       wheelSensitivity: 0.3,
     });
 
-    cy.on('tap', 'node', (evt: EventObject) => selectDevice(evt.target.id()));
-    cy.on('tap', (evt: EventObject) => { if (evt.target === cy) selectDevice(null); });
+    // Click node → open inspector panel
+    cy.on('tap', 'node', (evt: EventObject) => {
+      selectDevice(evt.target.id());
+      setRightPanelContent('device');
+    });
+    // Click canvas background → close panel
+    cy.on('tap', (evt: EventObject) => {
+      if (evt.target === cy) {
+        selectDevice(null);
+        setRightPanelContent(null);
+      }
+    });
 
+    // Hover → show hostname label + neighborhood highlight
     cy.on('mouseover', 'node', (evt: EventObject) => {
       const node = evt.target;
-      const pos = node.renderedPosition();
-      tooltipRef.current = { deviceId: node.id(), x: pos.x, y: pos.y };
-      containerRef.current?.dispatchEvent(new CustomEvent('node-hover', { detail: tooltipRef.current }));
+      node.addClass('hovered');
       const neighborhood = node.closedNeighborhood();
       cy.elements().addClass('dimmed');
       neighborhood.removeClass('dimmed').addClass('highlighted');
     });
 
     cy.on('mouseout', 'node', () => {
-      tooltipRef.current = null;
-      containerRef.current?.dispatchEvent(new CustomEvent('node-hover', { detail: null }));
-      cy.elements().removeClass('dimmed highlighted');
+      cy.elements().removeClass('dimmed highlighted hovered');
     });
 
     cy.on('mouseover', 'edge', (evt: EventObject) => {
-      const edge = evt.target;
-      edge.addClass('edge-hovered');
-      const midpoint = edge.midpoint();
-      const z = cy.zoom();
-      const pan = cy.pan();
-      containerRef.current?.dispatchEvent(new CustomEvent('edge-hover', {
-        detail: {
-          x: midpoint.x * z + pan.x,
-          y: midpoint.y * z + pan.y,
-          connection_type: edge.data('connection_type') || 'unknown',
-          bandwidth: edge.data('bandwidth') || 'N/A',
-          latency: edge.data('latency_ms'),
-          status: edge.data('status') || 'active',
-          is_redundant: edge.data('is_redundant') || false,
-        },
-      }));
+      evt.target.addClass('edge-hovered');
     });
 
     cy.on('mouseout', 'edge', () => {
       cy.edges().removeClass('edge-hovered');
-      containerRef.current?.dispatchEvent(new CustomEvent('edge-hover', { detail: null }));
     });
 
     cy.on('dbltap', 'node', (evt: EventObject) => {
@@ -92,7 +81,7 @@ export default function NetworkCanvas() {
     cyRef.current = cy;
     setCyReady((c) => c + 1);
     return () => { cy.destroy(); cyRef.current = null; };
-  }, [selectDevice]);
+  }, [selectDevice, setRightPanelContent]);
 
   useEffect(() => {
     const cy = cyRef.current;
@@ -180,10 +169,9 @@ export default function NetworkCanvas() {
   return (
     <div className="relative w-full h-full">
       <LayerToggle />
-      <div ref={containerRef} className="w-full h-full bg-bg-primary" />
+      <div ref={containerRef} className="w-full h-full bg-nd-black dot-grid-subtle" />
       <MiniMap cy={cyRef.current} key={cyReady} />
       <GraphControls onFit={handleFit} onZoomIn={handleZoomIn} onZoomOut={handleZoomOut} />
-      <NodeTooltip containerRef={containerRef} devices={devices} />
     </div>
   );
 }

@@ -1,9 +1,6 @@
 import { useState, useEffect, RefObject } from 'react';
 import type { Device } from '../../types/topology';
-import DeviceIcon from '../shared/DeviceIcon';
-import StatusBadge from '../shared/StatusBadge';
-import { formatTimeAgo, getRiskColor, CONNECTION_TYPE_COLORS } from '../../lib/graph-utils';
-import { Cable, Wifi, Globe, Shield, Zap } from 'lucide-react';
+import { formatTimeAgo, getRiskColor } from '../../lib/graph-utils';
 
 interface Props {
   containerRef: RefObject<HTMLDivElement>;
@@ -15,10 +12,6 @@ interface EdgeTooltipData {
   connection_type: string; bandwidth: string;
   latency: number | undefined; status: string; is_redundant: boolean;
 }
-
-const CONNECTION_ICONS: Record<string, typeof Cable> = {
-  ethernet: Cable, fiber: Zap, wireless: Wifi, vpn: Shield, virtual: Globe,
-};
 
 export default function NodeTooltip({ containerRef, devices }: Props) {
   const [tooltip, setTooltip] = useState<{ deviceId: string; x: number; y: number } | null>(null);
@@ -34,53 +27,89 @@ export default function NodeTooltip({ containerRef, devices }: Props) {
     return () => { el.removeEventListener('node-hover', nodeHandler); el.removeEventListener('edge-hover', edgeHandler); };
   }, [containerRef]);
 
+  // Edge tooltip
   if (edgeTooltip) {
-    const ConnIcon = CONNECTION_ICONS[edgeTooltip.connection_type] || Cable;
-    const color = CONNECTION_TYPE_COLORS[edgeTooltip.connection_type as keyof typeof CONNECTION_TYPE_COLORS] || '#5C5C5F';
-    const statusColor = edgeTooltip.status === 'active' ? '#34D399' : edgeTooltip.status === 'flapping' ? '#F87171' : '#FBBF24';
+    const statusColor = edgeTooltip.status === 'active' ? '#4A9E5C' : edgeTooltip.status === 'flapping' ? '#D71921' : '#D4A843';
 
     return (
-      <div className="absolute z-50 bg-bg-secondary border border-border rounded-lg shadow-lg pointer-events-none min-w-[200px] animate-fade-in" style={{ left: edgeTooltip.x + 16, top: edgeTooltip.y - 12 }}>
-        <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
-          <ConnIcon size={13} style={{ color }} />
-          <span className="text-[12px] font-medium capitalize" style={{ color }}>{edgeTooltip.connection_type}</span>
+      <div
+        className="absolute z-50 bg-nd-surface border border-nd-border-visible rounded-nd-compact pointer-events-none min-w-[200px] animate-fade-in"
+        style={{ left: edgeTooltip.x + 16, top: edgeTooltip.y - 12 }}
+      >
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-nd-border">
+          <span className="font-mono text-label uppercase tracking-[0.08em] text-nd-text-primary">{edgeTooltip.connection_type}</span>
           <span className="ml-auto w-1.5 h-1.5 rounded-full" style={{ backgroundColor: statusColor }} />
         </div>
-        <div className="px-3 py-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[12px]">
-          <div><div className="text-text-muted text-[10px]">Bandwidth</div><div className="text-text-secondary">{edgeTooltip.bandwidth}</div></div>
-          <div><div className="text-text-muted text-[10px]">Latency</div><div className="text-text-secondary">{edgeTooltip.latency != null ? `${edgeTooltip.latency}ms` : '—'}</div></div>
-          <div><div className="text-text-muted text-[10px]">Status</div><div className="capitalize" style={{ color: statusColor }}>{edgeTooltip.status}</div></div>
-          {edgeTooltip.is_redundant && <div><div className="text-text-muted text-[10px]">Redundant</div><div className="text-status-online">Yes</div></div>}
+        <div className="px-3 py-2 grid grid-cols-2 gap-x-4 gap-y-1.5">
+          <div>
+            <div className="font-mono text-label uppercase tracking-[0.08em] text-nd-text-secondary">Bandwidth</div>
+            <div className="font-mono text-caption text-nd-text-primary">{edgeTooltip.bandwidth}</div>
+          </div>
+          <div>
+            <div className="font-mono text-label uppercase tracking-[0.08em] text-nd-text-secondary">Latency</div>
+            <div className="font-mono text-caption text-nd-text-primary">{edgeTooltip.latency != null ? `${edgeTooltip.latency}ms` : '\u2014'}</div>
+          </div>
+          <div>
+            <div className="font-mono text-label uppercase tracking-[0.08em] text-nd-text-secondary">Status</div>
+            <div className="font-mono text-caption uppercase" style={{ color: statusColor }}>{edgeTooltip.status}</div>
+          </div>
+          {edgeTooltip.is_redundant && (
+            <div>
+              <div className="font-mono text-label uppercase tracking-[0.08em] text-nd-text-secondary">Redundant</div>
+              <div className="font-mono text-caption text-[#4A9E5C]">Yes</div>
+            </div>
+          )}
         </div>
       </div>
     );
   }
 
+  // Node tooltip
   if (!tooltip) return null;
   const device = devices.find((d) => d.id === tooltip.deviceId);
   if (!device) return null;
 
+  const statusColor = device.status === 'online' ? '#4A9E5C' : device.status === 'offline' ? '#D71921' : '#D4A843';
+
   return (
-    <div className="absolute z-50 bg-bg-secondary border border-border rounded-lg shadow-lg pointer-events-none min-w-[250px] animate-fade-in" style={{ left: tooltip.x + 20, top: tooltip.y - 20 }}>
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border">
-        <div className="flex items-center gap-2">
-          <DeviceIcon type={device.device_type} size={14} />
-          <div>
-            <div className="text-[13px] font-medium text-text-primary">{device.hostname || 'Unknown'}</div>
-            <div className="text-[10px] text-text-muted capitalize">{device.device_type}</div>
-          </div>
+    <div
+      className="absolute z-50 bg-nd-surface border border-nd-border-visible rounded-nd-compact pointer-events-none min-w-[240px] animate-fade-in"
+      style={{ left: tooltip.x + 20, top: tooltip.y - 20 }}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-nd-border">
+        <div>
+          <div className="text-body-sm font-sans font-medium text-nd-text-display">{device.hostname || 'Unknown'}</div>
+          <div className="font-mono text-label uppercase tracking-[0.08em] text-nd-text-disabled">{device.device_type}</div>
         </div>
-        <StatusBadge status={device.status} size={8} />
+        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: statusColor }} />
       </div>
-      <div className="px-3 py-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[12px]">
-        <div><div className="text-text-muted text-[10px]">IP</div><div className="text-text-secondary font-mono">{device.ip}</div></div>
-        <div><div className="text-text-muted text-[10px]">Tier</div><div className="text-text-secondary">Level {device.tier}</div></div>
-        <div><div className="text-text-muted text-[10px]">Risk</div><div className="font-medium" style={{ color: getRiskColor(device.risk_score) }}>{device.risk_score.toFixed(1)}</div></div>
-        <div><div className="text-text-muted text-[10px]">Last seen</div><div className="text-text-muted">{formatTimeAgo(device.last_seen)}</div></div>
+
+      {/* Data grid */}
+      <div className="px-3 py-2 grid grid-cols-2 gap-x-4 gap-y-1.5">
+        <div>
+          <div className="font-mono text-label uppercase tracking-[0.08em] text-nd-text-secondary">IP</div>
+          <div className="font-mono text-caption text-nd-text-primary">{device.ip}</div>
+        </div>
+        <div>
+          <div className="font-mono text-label uppercase tracking-[0.08em] text-nd-text-secondary">Tier</div>
+          <div className="font-mono text-caption text-nd-text-primary">Level {device.tier}</div>
+        </div>
+        <div>
+          <div className="font-mono text-label uppercase tracking-[0.08em] text-nd-text-secondary">Risk</div>
+          <div className="font-mono text-caption font-bold" style={{ color: getRiskColor(device.risk_score) }}>{device.risk_score.toFixed(1)}</div>
+        </div>
+        <div>
+          <div className="font-mono text-label uppercase tracking-[0.08em] text-nd-text-secondary">Last Seen</div>
+          <div className="font-mono text-caption text-nd-text-secondary">{formatTimeAgo(device.last_seen)}</div>
+        </div>
       </div>
+
+      {/* Footer */}
       {device.vendor && (
-        <div className="px-3 py-1.5 border-t border-border text-[10px] text-text-muted flex justify-between">
-          <span>{device.vendor}</span><span>{device.model || '—'}</span>
+        <div className="px-3 py-1.5 border-t border-nd-border font-mono text-label uppercase tracking-[0.06em] text-nd-text-disabled flex justify-between">
+          <span>{device.vendor}</span>
+          <span>{device.model || '\u2014'}</span>
         </div>
       )}
     </div>

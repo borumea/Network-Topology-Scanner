@@ -15,14 +15,14 @@ html, body, #root {
 }
 
 body {
-  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background-color: #111113;
-  color: #ECECED;
+  font-family: 'Space Grotesk', 'DM Sans', system-ui, sans-serif;
+  background-color: #F5F5F5;
+  color: #1A1A1A;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Scrollbar */
+/* Scrollbar — light mode */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -33,17 +33,50 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.12);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.2);
 }
 
-/* Monospace for data */
+/* Monospace data font */
 .font-mono {
-  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  font-family: 'Space Mono', 'JetBrains Mono', 'SF Mono', monospace;
+}
+
+/* Display font (Doto) */
+.font-display {
+  font-family: 'Doto', 'Space Mono', monospace;
+}
+
+/* Nothing ALL CAPS label style */
+.nd-label {
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  line-height: 1.2;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #666666;
+}
+
+/* Dot-grid background */
+.dot-grid {
+  background-image: radial-gradient(circle, #CCCCCC 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+.dot-grid-subtle {
+  background-image: radial-gradient(circle, #E8E8E8 0.5px, transparent 0.5px);
+  background-size: 12px 12px;
+}
+
+/* Nothing-style inline status text */
+.nd-status {
+  font-family: 'Space Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 0.04em;
 }
 
 @layer utilities {

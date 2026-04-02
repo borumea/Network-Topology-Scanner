@@ -5,75 +5,64 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Plus Jakarta Sans', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
-        mono: ['JetBrains Mono', 'Consolas', 'monospace'],
+        display: ['Doto', 'Space Mono', 'monospace'],
+        sans: ['Space Grotesk', 'DM Sans', 'system-ui', 'sans-serif'],
+        mono: ['Space Mono', 'JetBrains Mono', 'SF Mono', 'monospace'],
+      },
+      fontSize: {
+        'display-xl': ['72px', { lineHeight: '1.0', letterSpacing: '-0.03em' }],
+        'display-lg': ['48px', { lineHeight: '1.05', letterSpacing: '-0.02em' }],
+        'display-md': ['36px', { lineHeight: '1.1', letterSpacing: '-0.02em' }],
+        'heading': ['24px', { lineHeight: '1.2', letterSpacing: '-0.01em' }],
+        'subheading': ['18px', { lineHeight: '1.3', letterSpacing: '0' }],
+        'body': ['16px', { lineHeight: '1.5', letterSpacing: '0' }],
+        'body-sm': ['14px', { lineHeight: '1.5', letterSpacing: '0.01em' }],
+        'caption': ['12px', { lineHeight: '1.4', letterSpacing: '0.04em' }],
+        'label': ['11px', { lineHeight: '1.2', letterSpacing: '0.08em' }],
       },
       colors: {
-        bg: {
-          primary: '#111113',
-          secondary: '#19191B',
-          tertiary: '#222225',
-          surface: '#19191B',
+        nd: {
+          // Light mode surfaces
+          black: '#F5F5F5',
+          surface: '#FFFFFF',
+          'surface-raised': '#F0F0F0',
+          // Borders
+          border: '#E8E8E8',
+          'border-visible': '#CCCCCC',
+          // Text hierarchy
+          'text-disabled': '#999999',
+          'text-secondary': '#666666',
+          'text-primary': '#1A1A1A',
+          'text-display': '#000000',
+          // Accent & status
+          accent: '#D71921',
+          'accent-subtle': 'rgba(215,25,33,0.15)',
+          success: '#4A9E5C',
+          warning: '#D4A843',
+          interactive: '#007AFF',
         },
-        text: {
-          primary: '#ECECED',
-          secondary: '#8B8B8E',
-          muted: '#5C5C5F',
-        },
-        accent: {
-          DEFAULT: '#6366F1',
-          light: '#818CF8',
-          muted: '#4F46E5',
-        },
-        node: {
-          router: '#818CF8',
-          switch: '#60A5FA',
-          server: '#34D399',
-          firewall: '#FBBF24',
-          ap: '#A78BFA',
-          workstation: '#94A3B8',
-          iot: '#F472B6',
-          unknown: '#5C5C5F',
-          printer: '#FB923C',
-        },
-        status: {
-          online: '#34D399',
-          offline: '#F87171',
-          degraded: '#FBBF24',
-          new: '#60A5FA',
-        },
-        risk: {
-          low: '#34D399',
-          medium: '#FBBF24',
-          high: '#FB923C',
-          critical: '#F87171',
-        },
-        edge: {
-          ethernet: '#3F3F46',
-          fiber: '#818CF8',
-          wireless: '#A78BFA',
-          vpn: '#FBBF24',
-          virtual: '#8B8B8E',
-        },
-        border: {
-          DEFAULT: '#27272A',
-          light: '#2E2E32',
-        },
+      },
+      spacing: {
+        'nd-2xs': '2px',
+        'nd-xs': '4px',
+        'nd-sm': '8px',
+        'nd-md': '16px',
+        'nd-lg': '24px',
+        'nd-xl': '32px',
+        'nd-2xl': '48px',
+        'nd-3xl': '64px',
+        'nd-4xl': '96px',
+      },
+      borderRadius: {
+        'nd-technical': '4px',
+        'nd-compact': '8px',
+        'nd-card': '12px',
+        'nd-pill': '999px',
       },
       animation: {
-        'slide-in-right': 'slide-in-right 0.2s ease-out',
-        'slide-in-top': 'slide-in-top 0.25s ease-out',
-        'fade-in': 'fade-in 0.15s ease-out',
+        'fade-in': 'fade-in 0.15s cubic-bezier(0.25, 0.1, 0.25, 1)',
       },
       keyframes: {
-        'slide-in-right': {
-          '0%': { transform: 'translateX(100%)', opacity: '0' },
-          '100%': { transform: 'translateX(0)', opacity: '1' },
-        },
-        'slide-in-top': {
-          '0%': { transform: 'translateY(-8px)', opacity: '0' },
-          '100%': { transform: 'translateY(0)', opacity: '1' },
-        },
         'fade-in': {
           '0%': { opacity: '0' },
           '100%': { opacity: '1' },
