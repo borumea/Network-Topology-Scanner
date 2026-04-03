@@ -6,7 +6,7 @@
 
 Network Topology Scanner (NTS) is a network discovery and visualization tool that scans your LAN, infers device connections, and renders an interactive topology graph. It uses nmap, SNMP, and passive scanning to build a SQLite + NetworkX topology database, then serves it to a React frontend via FastAPI WebSocket. An IsolationForest model flags anomalous devices. Claude API generates natural language resilience reports.
 
-The project targets small-to-medium networks (home labs, small offices). The team uses Docker Compose for all development and demo work.
+The project targets small-to-medium networks (home labs, small offices). Development runs bare metal (Python venv + npm). Redis is optional but some features (pub/sub, caching) are unavailable without it.
 
 ## Directory Structure
 
@@ -22,14 +22,11 @@ Network-Topology-Scanner/
 │   └── Problem-Statement.md
 └── network-topology-mapper/        ← All application code lives here
     ├── demo.sh                     ← Start/stop/scan/status commands
-    ├── docker-compose.yml          ← Core services (backend, frontend, redis, demo containers)
-    ├── docker-compose.demo.yml     ← Demo network overlay (5 simulated devices on nts-net)
     ├── .env.example                ← Template — copy to .env for local dev
-    ├── .env.demo                   ← Pre-configured for Docker demo
+    ├── .env.dockerless             ← Pre-configured for bare-metal dev
     ├── .gitignore
     ├── README.md
     ├── backend/                    ← FastAPI Python backend
-    │   ├── Dockerfile
     │   ├── requirements.txt
     │   ├── app/
     │   │   ├── main.py             ← App entry point, lifespan, router registration
@@ -80,8 +77,6 @@ Network-Topology-Scanner/
     │   └── tests/
     │       └── test_connection_inference.py
     ├── frontend/                   ← React 18 + TypeScript + Vite
-    │   ├── Dockerfile
-    │   ├── nginx.conf
     │   └── src/
     │       ├── App.tsx
     │       ├── components/
@@ -118,11 +113,11 @@ Network-Topology-Scanner/
 
 1. **Do NOT create new top-level directories** inside `network-topology-mapper/` without team discussion.
 2. **Do NOT move files** between `backend/app/` subdirectories without understanding the import chain.
-3. **Do NOT modify** `docker-compose.yml` service names or `nts-net` network configuration — other compose files depend on it.
+3. **Do NOT modify** environment variable names in `.env.example` — other config files depend on them.
 4. **Do NOT add Celery back.** Scheduling uses asyncio in `main.py` lifespan. This was a deliberate architectural decision.
 5. **Do NOT commit `.env` files.** Use `.env.example` as the template. `.env.demo` is committed intentionally (no secrets).
 6. **Do NOT modify `Research-Paper/`** without explicit team discussion — this is shared academic work.
-7. **All backend code** goes under `backend/app/`. No Python files at `backend/` root except `requirements.txt` and `Dockerfile`.
+7. **All backend code** goes under `backend/app/`. No Python files at `backend/` root except `requirements.txt`.
 8. **All frontend components** follow the existing subdirectory convention: `components/dashboard/`, `components/graph/`, `components/layout/`, `components/panels/`, `components/shared/`.
 9. **New API routes** get their own file in `routers/` and must be registered in `main.py`.
 10. **New services** get their own file in the appropriate `services/` subdirectory.
@@ -171,15 +166,15 @@ Do not change without team discussion.
 | State management | Zustand |
 | Scanning | nmap (subprocess, NOT python-nmap), Scapy (passive), pysnmp, Netmiko |
 | Anomaly detection | scikit-learn IsolationForest |
-| AI reports | Anthropic Claude API |
-| Infra | Docker Compose, bridge networking (`nts-net`), nginx reverse proxy |
+| AI reports | Anthropic Claude API (Python SDK) |
+| Infra | Bare metal (Python venv + npm). Redis optional. |
 
 ---
 
 ## Key Architecture Decisions
 
-**Bridge networking (`nts-net`) — NOT `network_mode: host`.**
-Required for Mac compatibility. All inter-service communication uses Docker service names.
+**Bare metal, not Docker.**
+Backend runs via uvicorn, frontend via Vite dev server. No Docker required for development.
 
 **Connection inference runs unconditionally as Phase 5 of every scan.**
 `scan_coordinator.py` runs 5 phases: active nmap → passive Scapy → SNMP → config pull → inference. Phase 5 (`connection_inference.py`) uses gateway + switch-aware strategies to infer edges even when LLDP is unavailable (home networks).
@@ -200,26 +195,19 @@ All device and connection data is persisted in SQLite with NetworkX used for in-
 ## Development Workflow
 
 ```bash
-# Run the full demo (requires Docker only):
-cd network-topology-mapper
-./demo.sh up        # Starts all services + demo network (~60s for healthy state)
-./demo.sh scan      # Triggers a scan against 172.20.0.0/24
-./demo.sh status    # Health check
-./demo.sh down      # Tear down
+# Backend:
+cd network-topology-mapper/backend
+python -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+
+# Frontend (separate terminal):
+cd network-topology-mapper/frontend
+npm install && npm run dev
+
 # Frontend:   http://localhost:3000
 # Backend API: http://localhost:8000/api
 # API docs:   http://localhost:8000/docs
-
-# Backend bare-metal dev (editing Python code):
-cd network-topology-mapper/backend
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-# Optionally start Redis via Docker for pubsub, then:
-uvicorn app.main:app --reload --port 8000
-
-# Frontend dev:
-cd network-topology-mapper/frontend
-npm install && npm run dev
 ```
 
 ---
@@ -228,8 +216,7 @@ npm install && npm run dev
 
 - **Backend:** `cd backend && python -m pytest tests/` — must pass
 - **Frontend:** `cd frontend && npm run build` — must succeed (no TypeScript errors)
-- **Docker config changed:** `./demo.sh down && ./demo.sh up` — all services must reach healthy state
-- **Scan logic changed:** `./demo.sh scan` — verify devices + edges appear in the frontend graph
+- **Scan logic changed:** trigger a scan from the UI and verify devices + edges appear in the frontend graph
 
 ---
 

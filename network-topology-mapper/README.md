@@ -2,8 +2,6 @@
 
 A real-time network topology mapping and analysis platform that discovers devices, visualizes network relationships, identifies single points of failure, and provides AI-powered resilience insights.
 
-![Network Topology Mapper](docs/images/screenshot-main.png)
-
 ## Features
 
 - **Automated Network Discovery**: Active scanning (nmap), passive monitoring (Scapy), SNMP polling, and device configuration retrieval
@@ -12,7 +10,7 @@ A real-time network topology mapping and analysis platform that discovers device
 - **SPOF Detection**: Automatically identify single points of failure using graph analysis
 - **Real-time Monitoring**: WebSocket-based live updates for topology changes, alerts, and scan progress
 - **Risk Scoring**: Composite risk assessment for devices and overall network health
-- **AI-Powered Reports**: Natural language resilience reports powered by Claude API
+- **AI-Powered Reports**: Natural language resilience reports powered by Claude
 - **Anomaly Detection**: Machine learning-based detection of unusual topology changes
 - **Multi-Layer Views**: Physical, logical, and application layer visualization
 
@@ -21,7 +19,6 @@ A real-time network topology mapping and analysis platform that discovers device
 ### Frontend
 - **React 18** + TypeScript + Vite
 - **Cytoscape.js** for network graph visualization
-- **Recharts** for metrics and analytics
 - **Tailwind CSS** for styling
 - **Zustand** for state management
 - **WebSocket** for real-time updates
@@ -29,87 +26,52 @@ A real-time network topology mapping and analysis platform that discovers device
 ### Backend
 - **FastAPI** (Python 3.11+)
 - **SQLite** + **NetworkX** for device/connection storage and graph analysis
-- **Redis** for caching and real-time pub/sub
-- **SQLite** for scan history, alerts, topology snapshots, and settings
+- **Redis** for caching and real-time pub/sub (optional — Redis-backed features like pub/sub and cache are unavailable without it)
 - **asyncio-based task scheduler** for periodic scans and post-scan analysis
-- **NetworkX** for graph analysis
 - **scikit-learn** for anomaly detection (IsolationForest)
 
 ### Networking Tools
-- python-nmap for active scanning
+- nmap (subprocess) for active scanning
 - Scapy for passive packet capture
 - pysnmp for SNMP interrogation
 - Netmiko for device configuration retrieval
 
 ## Quick Start
 
-### Demo Mode (Zero Configuration)
-
-The fastest way to see NTS working end-to-end. Spins up the full stack plus 5 scannable demo containers on a private Docker network.
-
-**Prerequisites:** Docker, docker-compose
-
-```bash
-git clone <repository-url>
-cd network-topology-mapper
-
-# Start the full stack + demo network
-./demo.sh up
-
-# Once all services are healthy (~60s), trigger a scan
-./demo.sh scan
-
-# Check backend health
-./demo.sh status
-```
-
-**What happens:**
-- 5 demo containers start on `nts-net` (172.20.0.0/24): `web-server` (nginx), `db-server` (postgres), `file-server` (SSH+SMB), `printer` (JetDirect+IPP), `snmp-device` (net-snmp)
-- nmap discovers all containers on the bridge network
-- Connection inference creates star-topology edges through the Docker gateway (172.20.0.1)
-- Frontend at http://localhost:3000 renders the live topology graph
-- Topology stored in SQLite, graph analysis via NetworkX
-
-**Tear down:**
-```bash
-./demo.sh down
-```
-
-### Production Setup
-
 ### Prerequisites
 
-- Docker & Docker Compose
-- Python 3.11+ (for local development)
-- Node.js 18+ (for frontend development)
-- Redis (optional — app falls back to in-memory)
+- Python 3.11+
+- Node.js 18+
+- nmap (`brew install nmap` / `apt install nmap` / [nmap.org](https://nmap.org/download))
 
-### Using Docker Compose
+### Setup
 
-1. Clone the repository:
 ```bash
-git clone <repository-url>
-cd network-topology-mapper
+# Backend
+cd backend
+python -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+
+# Frontend (separate terminal, from project root)
+cd ../frontend
+npm install
+npm run dev
 ```
 
-2. Create environment configuration:
-```bash
-cp .env.example .env
-# Edit .env with your settings
-```
-
-3. Start all services:
-```bash
-docker-compose up -d
-```
-
-4. Access the application:
 - Frontend: http://localhost:3000
 - Backend API: http://localhost:8000
+- API docs: http://localhost:8000/docs
 
-### Local Development
+### Scan Your Network
 
-See [SETUP.md](docs/SETUP.md) for detailed local development setup instructions.
+Open http://localhost:3000, click **Scan** in the sidebar, enter your subnet (e.g. `192.168.1.0/24`), and hit scan. Or via CLI:
+
+```bash
+curl -X POST http://localhost:8000/api/scans \
+  -H "Content-Type: application/json" \
+  -d '{"type": "full", "target": "192.168.1.0/24", "intensity": "normal"}'
+```
 
 ## Project Structure
 
@@ -119,17 +81,17 @@ network-topology-mapper/
 │   ├── app/
 │   │   ├── main.py            # Application entry point
 │   │   ├── config.py          # Configuration management
-│   │   ├── models/            # Pydantic and SQLAlchemy models
+│   │   ├── models/            # Pydantic models
 │   │   ├── routers/           # API route handlers
 │   │   ├── services/          # Business logic
 │   │   │   ├── scanner/       # Network scanning services
 │   │   │   ├── graph/         # Graph analysis and manipulation
 │   │   │   ├── ai/            # AI/ML services
 │   │   │   └── realtime/      # WebSocket and event handling
-│   │   ├── tasks/             # Celery background tasks
-│   │   └── db/                # Database clients and connections
+│   │   ├── tasks/             # asyncio background tasks
+│   │   └── db/                # Database clients (topology_db, sqlite_db, redis_client)
 │   ├── requirements.txt
-│   └── Dockerfile
+│   └── tests/
 ├── frontend/                   # React frontend
 │   ├── src/
 │   │   ├── components/        # React components
@@ -142,20 +104,9 @@ network-topology-mapper/
 │   │   ├── stores/            # Zustand state stores
 │   │   ├── lib/               # Utilities and configurations
 │   │   └── types/             # TypeScript type definitions
-│   ├── package.json
-│   └── vite.config.ts
+│   └── package.json
 ├── docs/                       # Documentation
-│   ├── ARCHITECTURE.md        # System architecture details
-│   ├── API.md                 # API endpoint documentation
-│   ├── SETUP.md               # Setup and installation guide
-│   ├── CONTRIBUTING.md        # Contribution guidelines
-│   └── DEPLOYMENT.md          # Deployment instructions
-├── testing/                    # Test documentation
-│   ├── SMOKE_TEST.md
-│   └── TEST_CHECKLIST.md
-├── docker-compose.yml
-├── .env.example
-└── README.md
+└── testing/                    # Test checklists
 ```
 
 ## Documentation
@@ -164,36 +115,6 @@ network-topology-mapper/
 - [API Documentation](docs/API.md) - Complete API reference
 - [Setup Guide](docs/SETUP.md) - Installation and configuration
 - [Contributing Guide](docs/CONTRIBUTING.md) - How to contribute
-- [Frontend Components](docs/FRONTEND.md) - Component documentation
-- [Backend Services](docs/BACKEND.md) - Backend service documentation
-- [Deployment Guide](docs/DEPLOYMENT.md) - Production deployment
-
-## Key Concepts
-
-### Device Types
-- **Routers**: Core routing devices
-- **Switches**: Layer 2/3 switches
-- **Servers**: Application and service hosts
-- **Firewalls**: Security perimeter devices
-- **Access Points**: Wireless infrastructure
-- **Workstations**: End-user devices
-- **IoT**: Smart devices and sensors
-- **Unknown**: Unidentified devices
-
-### Connection Types
-- **Ethernet**: Standard wired connections
-- **Fiber**: High-speed fiber links
-- **Wireless**: Wi-Fi connections
-- **VPN**: Virtual private network tunnels
-- **Virtual**: Virtualized network connections
-
-### Risk Scoring
-Risk scores (0.0-1.0) are calculated based on:
-- Connectivity redundancy
-- Device criticality
-- Number of dependencies
-- Configuration vulnerabilities
-- Historical reliability
 
 ## Usage Examples
 
@@ -216,54 +137,13 @@ curl -X POST http://localhost:8000/api/simulate/failure \
   -d '{"remove_nodes": ["device-uuid-here"]}'
 ```
 
-### View Topology Snapshots
-```bash
-curl http://localhost:8000/api/snapshots
-```
-
-### Get Scan Optimizer Recommendations
-```bash
-curl http://localhost:8000/api/scan-optimizer/recommendations
-```
-
 ### Read / Update Settings
 ```bash
-# Get current settings
 curl http://localhost:8000/api/settings
 
-# Update scan interval and target range
 curl -X PUT http://localhost:8000/api/settings \
   -H "Content-Type: application/json" \
-  -d '{"scan_interval_minutes": 10, "scan_default_range": "172.20.0.0/24"}'
-```
-
-## Development
-
-### Backend Development
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-```
-
-### Frontend Development
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-### Running Tests
-```bash
-# Backend tests
-cd backend
-pytest
-
-# Frontend tests
-cd frontend
-npm test
+  -d '{"scan_interval_minutes": 10, "scan_default_range": "192.168.1.0/24"}'
 ```
 
 ## Configuration
@@ -271,15 +151,15 @@ npm test
 Key environment variables (see `.env.example` for full list):
 
 ```bash
-# Redis (optional)
+# Redis (optional — pub/sub and cache unavailable without it)
 REDIS_URL=redis://localhost:6379/0
 
-# Scanning
-SCAN_DEFAULT_RANGE=192.168.0.0/16
-SNMP_COMMUNITY=public
+# AI Reports (optional — resilience reports require this)
+ANTHROPIC_API_KEY=your-api-key-here
 
-# Claude API (for AI reports)
-ANTHROPIC_API_KEY=sk-ant-...
+# Scanning
+SCAN_DEFAULT_RANGE=192.168.1.0/24
+SNMP_COMMUNITY=public
 
 # Agent Mode
 AGENT_MODE=alert  # alert | interactive | autonomous
@@ -287,74 +167,24 @@ AGENT_MODE=alert  # alert | interactive | autonomous
 
 ## Security Considerations
 
-- Network scanning requires elevated privileges (NET_RAW, NET_ADMIN capabilities)
-- Secure your Redis instance with a strong password
+- Network scanning requires elevated privileges (nmap needs NET_RAW/NET_ADMIN or root)
 - Keep SNMP community strings confidential
 - Restrict API access in production environments
 - Review firewall rules before active scanning
 
-## Performance Tips
-
-- Use targeted scans instead of full network sweeps for faster discovery
-- Enable passive scanning for continuous monitoring without active probing
-- Adjust scan rate limits based on network capacity
-- Use Redis caching to reduce database load
-- Limit WebSocket client connections in production
-
-## Troubleshooting
-
-### Scanning Permission Errors
-Ensure Docker container has proper capabilities:
-```yaml
-cap_add:
-  - NET_RAW
-  - NET_ADMIN
-```
-
-### WebSocket Disconnections
-Check WebSocket heartbeat interval and firewall settings. Increase timeout in config if needed.
-
 ## Contributing
 
 We welcome contributions! Please see [CONTRIBUTING.md](docs/CONTRIBUTING.md) for guidelines.
-
-## License
-
-[Specify your license here]
 
 ## Acknowledgments
 
 - Built with [Cytoscape.js](https://js.cytoscape.org/) for graph visualization
 - Powered by [FastAPI](https://fastapi.tiangolo.com/) for the backend
 - Network analysis using [NetworkX](https://networkx.org/)
-- AI insights from [Claude API](https://www.anthropic.com/api)
-
-## Support
-
-For issues, questions, or suggestions:
-- Open an issue on GitHub
-- Check the [documentation](docs/)
-- Review [troubleshooting guide](docs/TROUBLESHOOTING.md)
-
-## Roadmap
-
-- [ ] Advanced traffic analysis integration
-- [ ] Multi-site topology management
-- [ ] Enhanced GNN-based failure prediction
-- [ ] Mobile responsive interface
-- [ ] SNMP trap receiver
-- [ ] Integration with CMDB systems
-- [ ] Custom alert rules engine
-- [ ] Automated remediation workflows
-
----
-
-**Status**: Active Development | **Version**: 1.0.0 | **Last Updated**: March 2026
 
 ## Known Limitations
 
-- **Anomaly detection requires 5+ topology snapshots** to train the IsolationForest model. During initial demo runs, only rule-based detection (flapping links, unknown devices) is active. After 5 scheduled scans have run, the ML model trains automatically.
-- **Passive scanning** (Scapy ARP sniffing) is disabled in demo mode — Docker bridge networking doesn't support raw packet capture across containers. Only nmap active scanning runs.
-- **SNMP polling** requires the `snmp-device` demo container to respond to the `public` community string on UDP 161. If the container starts slowly, the first scan may miss it.
-- **Settings changes** (via `PUT /api/settings`) take effect immediately for stored values, but `scan_interval_minutes` only applies to new scheduler instances. Restart the backend container to change the scan interval.
+- **Anomaly detection requires 5+ topology snapshots** to train the IsolationForest model. During initial use, only rule-based detection (flapping links, unknown devices) is active.
+- **Passive scanning** (Scapy ARP sniffing) requires root/admin privileges and may not work on all platforms.
+- **SNMP polling** requires devices that respond to the configured community string on UDP 161.
 - **Large topologies** (500+ devices) may slow down NetworkX graph analysis operations. Consider increasing scan intervals for very large networks.

@@ -6,33 +6,32 @@ Network discovery and visualization tool. Scans your LAN with nmap + SNMP + pass
 
 ---
 
-## Quickstart (Demo Mode)
+## Quickstart
 
-Requires Docker only.
+### Prerequisites
+
+- Python 3.11+
+- Node.js 18+
+- nmap
+
+### Run
 
 ```bash
 cd network-topology-mapper
-./demo.sh up      # starts all services + 5 demo network containers (~60s)
-./demo.sh scan    # triggers scan against demo network
-./demo.sh status  # health check
+
+# Backend
+cd backend
+python -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+
+# Frontend (separate terminal)
+cd network-topology-mapper/frontend
+npm install
+npm run dev
 ```
 
-Open http://localhost:3000 to see the topology graph.
-
-The demo network has: nginx web server, Postgres DB, file server (SSH+SMB), JetDirect printer, SNMP device — all on `nts-net` (172.20.0.0/24).
-
-```bash
-./demo.sh down    # tear down when done
-```
-
----
-
-## Prerequisites
-
-- Docker 20.10+ and Docker Compose 2.0+
-- 4 GB RAM available for Docker
-
-For local (non-Docker) development, see `INSTALL_GUIDE.md`.
+Open http://localhost:3000, click **Scan** in the sidebar, and scan your network.
 
 ---
 
@@ -48,14 +47,12 @@ For local (non-Docker) development, see `INSTALL_GUIDE.md`.
 
 ## Scan Your Own Network
 
-```bash
-# Trigger a scan against your LAN
-curl -X POST http://localhost:8000/api/scan \
-  -H "Content-Type: application/json" \
-  -d '{"target": "192.168.1.0/24"}'
+Use the Scan page in the UI, or via CLI:
 
-# Check topology stats
-curl http://localhost:8000/api/topology/stats | jq
+```bash
+curl -X POST http://localhost:8000/api/scans \
+  -H "Content-Type: application/json" \
+  -d '{"type": "full", "target": "192.168.1.0/24", "intensity": "normal"}'
 ```
 
 ---
@@ -63,11 +60,10 @@ curl http://localhost:8000/api/topology/stats | jq
 ## Docs
 
 - `CLAUDE.md` — agent constitution, directory structure, sacred rules
-- `QUICK_START_GUIDE.md` — demo quickstart
-- `INSTALL_GUIDE.md` — database setup for local dev
+- `QUICK_START_GUIDE.md` — standalone quickstart path
+- `INSTALL_GUIDE.md` — bare-metal setup details
 - `docs/ARCHITECTURE.md` — system architecture, scan pipeline, data flow
 - `docs/API.md` — full API reference
-- `docs/SETUP.md` — detailed setup guide
 - `docs/CONTRIBUTING.md` — branch conventions, PR process
 - `docs/TROUBLESHOOTING.md` — common issues and fixes
 
@@ -75,4 +71,4 @@ curl http://localhost:8000/api/topology/stats | jq
 
 ## Tech Stack
 
-Python 3.11 / FastAPI / SQLite + NetworkX / Redis 7 — React 18 / TypeScript / Vite / Cytoscape.js / Zustand / Tailwind CSS
+Python 3.11 / FastAPI / SQLite + NetworkX / Redis (optional) — React 18 / TypeScript / Vite / Cytoscape.js / Zustand / Tailwind CSS

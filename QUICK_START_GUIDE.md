@@ -1,26 +1,30 @@
 # Quick Start Guide
 
-## Demo Mode (Recommended — Zero Config)
+## Setup
 
-The fastest path to a working topology graph. Uses Docker with 5 simulated network containers.
+### Prerequisites
+- Python 3.11+
+- Node.js 18+
+- nmap
+
+### Install & Run
 
 ```bash
 cd network-topology-mapper
 
-# Start full stack + demo network (~60s for all containers to reach healthy state)
-./demo.sh up
+# Backend
+cd backend
+python -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
 
-# Trigger a scan once services are healthy
-./demo.sh scan
-
-# Open http://localhost:3000 to see the topology graph
+# Frontend (separate terminal, from network-topology-mapper/)
+cd frontend
+npm install
+npm run dev
 ```
 
-**What you get:** nginx web server, Postgres DB, file server (SSH+SMB), JetDirect printer, SNMP device — all on `nts-net` (172.20.0.0/24). The backend scans them with nmap, runs connection inference, and renders a topology graph.
-
-```bash
-./demo.sh down    # tear down when done
-```
+Open http://localhost:3000 to see the topology graph.
 
 ---
 
@@ -34,14 +38,16 @@ cd network-topology-mapper
 
 ---
 
-## Scan Your Own Network
+## Scan Your Network
 
-With the stack running, trigger a scan against your real LAN:
+Click **Scan** in the sidebar, enter your subnet (e.g. `192.168.1.0/24`), select intensity, and hit scan.
+
+Or via CLI:
 
 ```bash
-curl -X POST http://localhost:8000/api/scan \
+curl -X POST http://localhost:8000/api/scans \
   -H "Content-Type: application/json" \
-  -d '{"target": "192.168.1.0/24"}'
+  -d '{"type": "full", "target": "192.168.1.0/24", "intensity": "normal"}'
 
 # Check progress
 curl http://localhost:8000/api/scans | jq
@@ -67,34 +73,28 @@ curl http://localhost:8000/api/alerts | jq
 
 ---
 
-## Local Development (Without Docker)
-
-For bare-metal backend development, see `INSTALL_GUIDE.md`.
-
----
-
 ## Troubleshooting
 
 **Graph shows no devices after scan:**
 - Wait for scan to complete: `curl http://localhost:8000/api/scans | jq`
-- Check scan target matches the demo network: `172.20.0.0/24`
-- Try `./demo.sh scan` instead of a manual curl
+- Verify nmap is installed: `nmap --version`
+- On Linux, nmap may need elevated privileges: `sudo setcap cap_net_raw,cap_net_admin=eip $(which nmap)`
 
-**Services won't start:**
-- Ensure Docker has at least 4 GB RAM allocated
-- Check for port conflicts: `lsof -i :3000; lsof -i :8000; lsof -i :7474`
-- Try `./demo.sh down && ./demo.sh up`
+**Backend won't start:**
+- Check Python version: `python --version` (needs 3.11+)
+- Make sure venv is activated
+- Check port 8000 isn't in use
 
 **Frontend shows empty graph after scan completes:**
-- Hard refresh: `Cmd+Shift+R` (macOS) or `Ctrl+Shift+R` (Linux)
-- Check backend logs: `docker logs network-topology-mapper-backend-1`
+- Hard refresh: `Cmd+Shift+R` (macOS) or `Ctrl+Shift+R` (Windows/Linux)
+- Check backend terminal for errors
 
 ---
 
 ## More Documentation
 
 - `CLAUDE.md` — agent constitution, directory structure, sacred rules
-- `INSTALL_GUIDE.md` — manual database installation
+- `INSTALL_GUIDE.md` — detailed setup
 - `docs/ARCHITECTURE.md` — system architecture
 - `docs/API.md` — full API reference
 - `docs/TROUBLESHOOTING.md` — common issues
