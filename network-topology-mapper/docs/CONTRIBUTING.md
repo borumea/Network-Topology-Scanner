@@ -25,7 +25,7 @@ Format: `type(scope): description`
 feat(scanner): add LLDP neighbor discovery
 fix(frontend): handle empty topology gracefully
 docs: update API reference
-chore(docker): bump neo4j to 5.20
+chore(docker): bump redis to 7.4
 refactor(inference): simplify gateway detection logic
 test(scanner): add unit tests for SNMP poller
 ```

@@ -24,7 +24,6 @@ case "${1:-}" in
     echo ""
     echo "  Frontend:  http://localhost:3000"
     echo "  Backend:   http://localhost:8000"
-    echo "  Neo4j:     http://localhost:7474  (neo4j / changeme)"
     echo ""
     echo "Run './demo.sh scan' once all services are healthy."
     ;;

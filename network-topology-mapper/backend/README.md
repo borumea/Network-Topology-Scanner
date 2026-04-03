@@ -6,11 +6,11 @@ FastAPI-based backend for network topology mapping and analysis.
 
 The backend handles:
 - Network device discovery (active/passive scanning, SNMP)
-- Graph database management (Neo4j)
+- Topology database management (SQLite + NetworkX)
 - Real-time WebSocket communication
 - Graph analysis and failure simulation
 - AI-powered report generation
-- Background task processing (Celery)
+- Background task processing (asyncio)
 
 ## Architecture
 
@@ -47,12 +47,11 @@ app/
 │   └── realtime/          # WebSocket & events
 │       ├── event_bus.py
 │       └── ws_manager.py
-├── tasks/                 # Celery background tasks
-│   ├── celery_app.py
+├── tasks/                 # Asyncio background tasks
 │   ├── scan_tasks.py
 │   └── analysis_tasks.py
 └── db/                    # Database clients
-    ├── neo4j_client.py
+    ├── topology_db.py
     ├── redis_client.py
     └── sqlite_db.py
 ```
@@ -78,9 +77,9 @@ cp .env.example .env
 # Edit .env with your settings
 ```
 
-4. **Start services** (Neo4j, Redis):
+4. **Start Redis** (optional — app works without it):
 ```bash
-docker-compose up -d neo4j redis
+docker run -d --name redis -p 6379:6379 redis:7-alpine
 ```
 
 5. **Run server**:
@@ -170,7 +169,7 @@ alembic downgrade -1
 ### Graph Services
 
 **Graph Builder** (`services/graph/graph_builder.py`):
-- Creates/updates Neo4j nodes and relationships
+- Creates/updates topology database records
 - Correlates scan results
 - Maintains graph consistency
 
@@ -265,58 +264,22 @@ WS     /ws/topology               - Real-time events
 
 ## Database Models
 
-### Neo4j Graph
+### SQLite Tables (topology_db + sqlite_db)
 
-**Device Node**:
-```cypher
-(:Device {
-  id: UUID,
-  ip: String,
-  mac: String,
-  hostname: String,
-  device_type: String,
-  vendor: String,
-  model: String,
-  risk_score: Float,
-  status: String
-})
-```
-
-**Relationships**:
-```cypher
-(:Device)-[:CONNECTS_TO {
-  connection_type: String,
-  bandwidth: String,
-  latency_ms: Float
-}]->(:Device)
-
-(:Device)-[:DEPENDS_ON {
-  dependency_type: String,
-  criticality: String
-}]->(:Device)
-```
-
-### SQLite Tables
-
+**devices**: All discovered devices (id, ip, mac, hostname, device_type, vendor, model, risk_score, status, etc.)
+**connections**: Device-to-device connections (source_id, target_id, connection_type, bandwidth, latency_ms, etc.)
 **scans**: Scan history and metadata
 **alerts**: Alert log and status
 **topology_snapshots**: Periodic topology snapshots
+**settings**: User-configurable settings overrides
 
 ## Background Tasks
 
-### Celery Workers
+### Scheduled Tasks (asyncio)
 
-Start Celery worker:
-```bash
-celery -A app.tasks.celery_app worker --loglevel=info
-```
+Scheduled via asyncio tasks in the FastAPI lifespan function (`main.py`).
 
-Start Celery beat (scheduler):
-```bash
-celery -A app.tasks.celery_app beat --loglevel=info
-```
-
-### Scheduled Tasks
+### Task Schedule
 
 - **Full scan**: Every 6 hours
 - **SNMP poll**: Every 30 minutes
@@ -330,9 +293,6 @@ Key environment variables:
 
 ```bash
 # Databases
-NEO4J_URI=bolt://localhost:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=password
 REDIS_URL=redis://localhost:6379/0
 SQLITE_PATH=./data/mapper.db
 
@@ -390,7 +350,6 @@ All endpoints return consistent error responses:
 
 - Input validation via Pydantic models
 - SQL injection protection (parameterized queries)
-- Neo4j authentication required
 - Redis authentication recommended
 - Rate limiting (future)
 - CORS configuration in `main.py`
@@ -405,8 +364,8 @@ All endpoints return consistent error responses:
 
 ### Database Optimization
 
-- Neo4j indexes on device IDs, IPs, MACs
-- Connection pooling for all databases
+- SQLite indexes on device IDs, IPs, MACs
+- Connection pooling for Redis
 - Async I/O throughout
 
 ### Monitoring
@@ -421,11 +380,6 @@ Prometheus metrics exposed at `/metrics`:
 ## Troubleshooting
 
 ### Common Issues
-
-**"Cannot connect to Neo4j"**
-- Check Neo4j is running
-- Verify credentials in .env
-- Test connection: `neo4j://localhost:7687`
 
 **"Permission denied" on nmap**
 - Requires root or NET_RAW capability
@@ -486,7 +440,7 @@ docker run -p 8000:8000 --env-file .env network-mapper-backend
 ### Production Checklist
 
 - [ ] Set `APP_DEBUG=false`
-- [ ] Use strong passwords for Neo4j/Redis
+- [ ] Use strong password for Redis
 - [ ] Configure proper CORS origins
 - [ ] Enable HTTPS (reverse proxy)
 - [ ] Set up monitoring and logging

@@ -4,7 +4,7 @@
 
 ## Project Overview
 
-Network Topology Scanner (NTS) is a network discovery and visualization tool that scans your LAN, infers device connections, and renders an interactive topology graph. It uses nmap, SNMP, and passive scanning to build a Neo4j graph database, then serves it to a React frontend via FastAPI WebSocket. An IsolationForest model flags anomalous devices. Claude API generates natural language resilience reports.
+Network Topology Scanner (NTS) is a network discovery and visualization tool that scans your LAN, infers device connections, and renders an interactive topology graph. It uses nmap, SNMP, and passive scanning to build a SQLite + NetworkX topology database, then serves it to a React frontend via FastAPI WebSocket. An IsolationForest model flags anomalous devices. Claude API generates natural language resilience reports.
 
 The project targets small-to-medium networks (home labs, small offices). The team uses Docker Compose for all development and demo work.
 
@@ -22,7 +22,7 @@ Network-Topology-Scanner/
 │   └── Problem-Statement.md
 └── network-topology-mapper/        ← All application code lives here
     ├── demo.sh                     ← Start/stop/scan/status commands
-    ├── docker-compose.yml          ← Core services (backend, frontend, neo4j, redis, demo containers)
+    ├── docker-compose.yml          ← Core services (backend, frontend, redis, demo containers)
     ├── docker-compose.demo.yml     ← Demo network overlay (5 simulated devices on nts-net)
     ├── .env.example                ← Template — copy to .env for local dev
     ├── .env.demo                   ← Pre-configured for Docker demo
@@ -35,7 +35,7 @@ Network-Topology-Scanner/
     │   │   ├── main.py             ← App entry point, lifespan, router registration
     │   │   ├── config.py           ← Pydantic settings (reads .env)
     │   │   ├── db/                 ← Database clients
-    │   │   │   ├── neo4j_client.py
+    │   │   │   ├── topology_db.py
     │   │   │   ├── redis_client.py
     │   │   │   └── sqlite_db.py
     │   │   ├── models/             ← Pydantic models
@@ -73,7 +73,7 @@ Network-Topology-Scanner/
     │   │   │   ├── realtime/       ← WebSocket + event bus
     │   │   │   │   ├── event_bus.py
     │   │   │   │   └── ws_manager.py
-    │   │   │   └── mock_data.py    ← Dev fallback when Neo4j is down
+    │   │   │   └── mock_data.py    ← Dev fallback data
     │   │   └── tasks/              ← Background tasks (asyncio, NOT Celery)
     │   │       ├── analysis_tasks.py
     │   │       └── scan_tasks.py
@@ -145,7 +145,7 @@ Examples:
 feat(scanner): add LLDP neighbor discovery
 fix(frontend): handle empty topology gracefully
 docs: update API reference
-chore(docker): bump neo4j to 5.20
+chore(docker): bump redis to 7.4
 ```
 
 Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`
@@ -163,7 +163,7 @@ Do not change without team discussion.
 | Layer | Technology |
 |-------|-----------|
 | Backend | Python 3.11+, FastAPI, Uvicorn |
-| Graph DB | Neo4j 5 (graph storage + SPOF queries) |
+| Topology DB | SQLite + NetworkX (graph storage + SPOF queries) |
 | Cache / Pubsub | Redis 7 |
 | Metadata / History | SQLite (scans, alerts, snapshots, settings) |
 | Frontend | React 18, TypeScript, Vite, Tailwind CSS |
@@ -179,7 +179,7 @@ Do not change without team discussion.
 ## Key Architecture Decisions
 
 **Bridge networking (`nts-net`) — NOT `network_mode: host`.**
-Required for Mac compatibility. All inter-service communication uses Docker service names (e.g., `neo4j:7687`).
+Required for Mac compatibility. All inter-service communication uses Docker service names.
 
 **Connection inference runs unconditionally as Phase 5 of every scan.**
 `scan_coordinator.py` runs 5 phases: active nmap → passive Scapy → SNMP → config pull → inference. Phase 5 (`connection_inference.py`) uses gateway + switch-aware strategies to infer edges even when LLDP is unavailable (home networks).
@@ -187,8 +187,8 @@ Required for Mac compatibility. All inter-service communication uses Docker serv
 **Asyncio scheduling, not Celery.**
 Periodic scans and analysis are scheduled via `asyncio` tasks in the FastAPI `lifespan` function (`main.py`). There is no Celery worker or broker config.
 
-**`_patched_get_full_topology()` in `main.py` is intentional.**
-This intercepts `GET /api/topology` when Neo4j is unavailable and serves mock data. It's a dev fallback — do not remove it.
+**Topology is stored in SQLite via `topology_db.py`.**
+All device and connection data is persisted in SQLite with NetworkX used for in-memory graph analysis (SPOF detection, path analysis, resilience scoring).
 
 **IsolationForest requires a minimum number of devices to train.**
 `analysis_tasks.py` has a minimum-data guard; anomaly detection silently skips if there aren't enough devices.
@@ -209,13 +209,12 @@ cd network-topology-mapper
 # Frontend:   http://localhost:3000
 # Backend API: http://localhost:8000/api
 # API docs:   http://localhost:8000/docs
-# Neo4j:      http://localhost:7474  (neo4j / changeme)
 
 # Backend bare-metal dev (editing Python code):
 cd network-topology-mapper/backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-# Start Neo4j + Redis via Docker first, then:
+# Optionally start Redis via Docker for pubsub, then:
 uvicorn app.main:app --reload --port 8000
 
 # Frontend dev:

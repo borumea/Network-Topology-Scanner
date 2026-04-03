@@ -18,7 +18,7 @@
 │  │ Engine   │  │ Analyzer  │  │ Detection    │  │ Reports  │  │
 │  └──────────┘  └───────────┘  └──────────────┘  └──────────┘  │
 ├──────────────────────────────────────────────────────────────────┤
-│  Neo4j (graph topology) │ Redis (cache + pubsub) │ SQLite (meta)│
+│  SQLite (storage) │ NetworkX (graph analysis) │ Redis (pubsub) │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -41,7 +41,7 @@ ScanCoordinator.run_scan()
       └─── Phase 5: ConnectionInference (UNCONDITIONAL — infer edges from topology data)
                         │
                         ▼
-                   GraphBuilder    ← merges results, deduplicates, creates Neo4j nodes/edges
+                   GraphBuilder    ← merges results, deduplicates, stores devices/edges in SQLite
                         │
                         ▼
                    EventBus.publish("topology_updated")
@@ -50,7 +50,7 @@ ScanCoordinator.run_scan()
                    Redis pub/sub → WsManager → all WebSocket clients
 ```
 
-**Phase 5 always runs.** Even if earlier phases find nothing, inference runs and attempts to infer gateway-based connections from whatever data is in Neo4j.
+**Phase 5 always runs.** Even if earlier phases find nothing, inference runs and attempts to infer gateway-based connections from whatever data is in the topology store.
 
 **ActiveScanner** uses nmap via subprocess (NOT python-nmap). Configurable intensity: `light`, `normal`, `deep`.
 
@@ -74,7 +74,7 @@ else:
     infer_gateway_star(devices, gateway_ip)
 ```
 
-Edges are written to Neo4j as `CONNECTS_TO` relationships. The frontend renders them as graph edges in Cytoscape.js.
+Edges are stored in SQLite and analyzed with NetworkX in-memory graphs. The frontend renders them as graph edges in Cytoscape.js.
 
 ---
 
@@ -93,7 +93,7 @@ nts-net (172.20.0.0/24)
    └── snmp-device (alpine) ← port 161/UDP (SNMP)
 ```
 
-The backend uses nmap to scan 172.20.0.0/24, discovers these containers, runs connection inference, and populates Neo4j.
+The backend uses nmap to scan 172.20.0.0/24, discovers these containers, runs connection inference, and stores the topology in SQLite.
 
 ---
 
@@ -159,7 +159,7 @@ Services return Pydantic models. They do not handle HTTP directly.
 Periodic work is registered in `main.py`'s `lifespan` function using `asyncio.create_task()`:
 
 - Periodic full scan (configurable interval)
-- Topology snapshot (captures Neo4j state to SQLite for diff/history)
+- Topology snapshot (captures current topology state for diff/history)
 - Anomaly detection run (IsolationForest, requires minimum device count)
 
 There is no Celery worker, broker config, or `celery_app.py`.
@@ -190,31 +190,9 @@ Event types: `device_added`, `device_removed`, `device_updated`, `connection_cha
 
 ## Data Layer
 
-### Neo4j Schema
-
-```cypher
-(:Device {
-  id, ip, mac, hostname, device_type,
-  vendor, model, os, open_ports, services,
-  first_seen, last_seen, vlan_ids, subnet,
-  risk_score, criticality, status
-})
-
-(:Device)-[:CONNECTS_TO {
-  connection_type, bandwidth, latency_ms,
-  packet_loss_pct, is_redundant, status
-}]->(:Device)
-
-(:Device)-[:DEPENDS_ON {
-  dependency_type, service_port, criticality
-}]->(:Device)
-
-(:Device)-[:MEMBER_OF]->(:VLAN)
-```
-
 ### SQLite Schema
 
-SQLite stores metadata that doesn't need graph queries:
+SQLite is the primary data store for all topology data:
 
 - `scans` — scan history (id, type, status, start/end time, target, devices found)
 - `alerts` — alert log (id, type, severity, title, device_id, created_at, status)
@@ -236,7 +214,7 @@ SQLite stores metadata that doesn't need graph queries:
 
 - No authentication implemented (planned for future)
 - Docker network isolation via `nts-net` bridge
-- Redis and Neo4j require authentication (configured in `.env`)
+- Redis requires authentication (configured in `.env`)
 - SNMP community string configurable
 - Scan capabilities granted via `cap_add: NET_RAW, NET_ADMIN` (not `network_mode: host`)
 
@@ -246,7 +224,7 @@ SQLite stores metadata that doesn't need graph queries:
 
 **Cytoscape.js** — mature graph renderer, rich layout ecosystem, good TypeScript support.
 
-**Neo4j** — native graph database; SPOF detection uses articulation point algorithms that benefit from graph-native storage.
+**SQLite + NetworkX** — SQLite provides durable storage for devices and connections; NetworkX provides in-memory graph algorithms for SPOF detection, path analysis, and resilience scoring without requiring a separate database server.
 
 **FastAPI** — async Python, automatic OpenAPI docs, built-in WebSocket support.
 
