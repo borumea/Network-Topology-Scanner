@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { useTopologyStore } from '../stores/topologyStore';
 import { useFilterStore } from '../stores/filterStore';
 import { fetchTopology, fetchTopologyStats, fetchSPOFs } from '../lib/api';
@@ -6,6 +6,7 @@ import { fetchTopology, fetchTopologyStats, fetchSPOFs } from '../lib/api';
 export function useTopology() {
   const { setTopology, setStats, setSPOFs, setLoading, setError } = useTopologyStore();
   const { activeLayer } = useFilterStore();
+  const reloadTimerRef = useRef<number>();
 
   const loadTopology = useCallback(async () => {
     setLoading(true);
@@ -38,6 +39,26 @@ export function useTopology() {
 
   useEffect(() => {
     loadTopology();
+  }, [loadTopology]);
+
+  // Auto-reload topology when a scan completes
+  useEffect(() => {
+    const handleScanProgress = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.phase === 'completed' || detail?.percent >= 100) {
+        // Small delay to let the DB finish writing
+        if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
+        reloadTimerRef.current = window.setTimeout(() => {
+          loadTopology();
+        }, 1500);
+      }
+    };
+
+    window.addEventListener('ws-scan-progress', handleScanProgress);
+    return () => {
+      window.removeEventListener('ws-scan-progress', handleScanProgress);
+      if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
+    };
   }, [loadTopology]);
 
   return { reload: loadTopology };

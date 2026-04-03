@@ -35,6 +35,65 @@ class SQLiteDB:
     def _init_tables(self):
         cursor = self._conn.cursor()
         cursor.executescript("""
+            PRAGMA journal_mode=WAL;
+            PRAGMA foreign_keys=ON;
+
+            CREATE TABLE IF NOT EXISTS devices (
+                id TEXT PRIMARY KEY,
+                ip TEXT UNIQUE,
+                hostname TEXT DEFAULT '',
+                mac TEXT DEFAULT '',
+                device_type TEXT DEFAULT 'unknown',
+                vendor TEXT DEFAULT '',
+                model TEXT DEFAULT '',
+                os TEXT DEFAULT '',
+                status TEXT DEFAULT 'online',
+                risk_score REAL DEFAULT 0.0,
+                criticality TEXT DEFAULT 'low',
+                is_gateway INTEGER DEFAULT 0,
+                first_seen TEXT,
+                last_seen TEXT,
+                discovery_method TEXT DEFAULT 'active_scan',
+                open_ports TEXT DEFAULT '[]',
+                services TEXT DEFAULT '[]',
+                vlan_ids TEXT DEFAULT '[]',
+                subnet TEXT DEFAULT '',
+                location TEXT DEFAULT ''
+            );
+
+            CREATE TABLE IF NOT EXISTS connections (
+                id TEXT PRIMARY KEY,
+                source_id TEXT NOT NULL,
+                target_id TEXT NOT NULL,
+                connection_type TEXT DEFAULT 'ethernet',
+                bandwidth TEXT DEFAULT '',
+                switch_port TEXT DEFAULT '',
+                vlan INTEGER,
+                latency_ms REAL DEFAULT 0.0,
+                packet_loss_pct REAL DEFAULT 0.0,
+                is_redundant INTEGER DEFAULT 0,
+                protocol TEXT DEFAULT 'access',
+                status TEXT DEFAULT 'active',
+                confidence REAL DEFAULT 0.0,
+                inferred_by TEXT DEFAULT '',
+                first_seen TEXT,
+                last_seen TEXT,
+                FOREIGN KEY (source_id) REFERENCES devices(id),
+                FOREIGN KEY (target_id) REFERENCES devices(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS dependencies (
+                id TEXT PRIMARY KEY,
+                source_id TEXT NOT NULL,
+                target_id TEXT NOT NULL,
+                dependency_type TEXT DEFAULT '',
+                service_port INTEGER DEFAULT 0,
+                criticality TEXT DEFAULT 'medium',
+                discovered_via TEXT DEFAULT 'traffic_analysis',
+                FOREIGN KEY (source_id) REFERENCES devices(id),
+                FOREIGN KEY (target_id) REFERENCES devices(id)
+            );
+
             CREATE TABLE IF NOT EXISTS scans (
                 id TEXT PRIMARY KEY,
                 scan_type TEXT NOT NULL,
