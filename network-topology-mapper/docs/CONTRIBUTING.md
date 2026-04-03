@@ -25,13 +25,13 @@ Format: `type(scope): description`
 feat(scanner): add LLDP neighbor discovery
 fix(frontend): handle empty topology gracefully
 docs: update API reference
-chore(docker): bump redis to 7.4
+chore(deps): bump redis client version
 refactor(inference): simplify gateway detection logic
 test(scanner): add unit tests for SNMP poller
 ```
 
 Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`
-Scopes: `scanner`, `inference`, `graph`, `frontend`, `api`, `docker`, `demo`, `ai`
+Scopes: `scanner`, `inference`, `graph`, `frontend`, `api`, `demo`, `ai`, `deps`
 
 ---
 
@@ -59,11 +59,12 @@ cd backend && python -m pytest tests/
 # Frontend build must succeed (no TypeScript errors)
 cd frontend && npm run build
 
-# If you changed Docker config:
+# If you changed optional demo Docker config:
 ./demo.sh down && ./demo.sh up   # all services must reach healthy state
 
 # If you changed scan logic:
-./demo.sh scan   # verify devices and edges appear in the graph
+# run a local scan against your dev target and verify devices/edges appear in graph
+curl -X POST http://localhost:8000/api/scans -H "Content-Type: application/json" -d '{"type":"full","target":"192.168.1.0/24"}'
 ```
 
 ---
@@ -86,6 +87,6 @@ These are enforced across all contributions — see `CLAUDE.md` for the full lis
 
 - No new top-level directories in `network-topology-mapper/` without team discussion
 - No Celery (scheduling uses asyncio in `main.py` lifespan)
-- No `network_mode: host` in Docker compose files (breaks Mac)
+- No `network_mode: host` in optional demo Docker compose files (breaks Mac)
 - Never commit `.env` files
 - Never touch `Research-Paper/` without team discussion

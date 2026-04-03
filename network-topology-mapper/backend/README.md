@@ -77,9 +77,16 @@ cp .env.example .env
 # Edit .env with your settings
 ```
 
-4. **Start Redis** (optional — app works without it):
+4. **Start Redis** (optional - app works without it):
 ```bash
-docker run -d --name redis -p 6379:6379 redis:7-alpine
+# Linux (systemd)
+sudo systemctl start redis-server
+
+# macOS (Homebrew)
+brew services start redis
+
+# Optional alternative if you prefer containers
+# docker run -d --name redis -p 6379:6379 redis:7-alpine
 ```
 
 5. **Run server**:
@@ -430,12 +437,7 @@ topology = generate_mock_topology(device_count=100)
 
 ## Deployment
 
-### Docker
-
-```bash
-docker build -t network-mapper-backend .
-docker run -p 8000:8000 --env-file .env network-mapper-backend
-```
+Run behind a process manager/reverse proxy in production (for example `systemd` + `nginx`). Docker is optional and mainly used by the demo lab environment.
 
 ### Production Checklist
 

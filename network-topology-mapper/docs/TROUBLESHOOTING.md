@@ -11,7 +11,7 @@ Common issues and solutions for Network Topology Mapper.
 - [Performance Issues](#performance-issues)
 - [Frontend Problems](#frontend-problems)
 - [API Errors](#api-errors)
-- [Docker Issues](#docker-issues)
+- [Optional Demo Docker Issues](#optional-demo-docker-issues)
 
 ---
 
@@ -87,14 +87,11 @@ redis-cli ping
 
 1. **Start Redis**:
 ```bash
-# Docker
-docker-compose up -d redis
-
 # System service
 sudo systemctl start redis
 
-# Check logs
-docker logs redis
+# macOS (Homebrew)
+brew services start redis
 ```
 
 2. **Check configuration**:
@@ -180,16 +177,7 @@ sudo setcap cap_net_raw,cap_net_admin=eip /usr/bin/nmap
 # Log out and back in for group change
 ```
 
-4. **Docker**: Ensure proper capabilities (already configured in `docker-compose.yml`):
-```yaml
-# docker-compose.yml
-services:
-  backend:
-    cap_add:
-      - NET_RAW
-      - NET_ADMIN
-    # Uses bridge networking (nts-net) — do NOT set network_mode: host
-```
+4. **Optional demo containers**: If using the demo stack, capabilities are preconfigured in `docker-compose.yml`; this is not required for local development.
 
 ### No Devices Found During Scan
 
@@ -529,7 +517,8 @@ CACHE_TTL_TOPOLOGY=60  # Expire after 60 seconds
 3. **Restart services**:
 ```bash
 # Temporary fix
-docker-compose restart backend
+pkill -f "uvicorn app.main"
+uvicorn app.main:app --reload
 
 # Add healthcheck and auto-restart
 ```
@@ -664,7 +653,7 @@ curl -X POST http://localhost:8000/api/scans \
 **Diagnosis**:
 ```bash
 # Check backend logs
-docker-compose logs backend
+# Look at the terminal where uvicorn is running
 
 # Look for stack traces and exceptions
 ```
@@ -692,8 +681,6 @@ curl http://localhost:8000/health
 
 1. **Check backend is running**:
 ```bash
-docker-compose ps backend
-# or
 ps aux | grep uvicorn
 ```
 
@@ -708,12 +695,15 @@ df -h
 
 3. **Restart backend**:
 ```bash
-docker-compose restart backend
+pkill -f "uvicorn app.main"
+uvicorn app.main:app --reload
 ```
 
 ---
 
-## Docker Issues
+## Optional Demo Docker Issues
+
+This section only applies when running the optional demo lab in `demo/` via Docker Compose.
 
 ### Container Won't Start
 
@@ -753,7 +743,7 @@ cp .env.example .env
 sudo chown -R $USER:$USER ./data
 ```
 
-### Docker Compose Network Issues
+### Docker Compose Network Issues (Demo Only)
 
 **Problem**: Services cannot communicate
 
@@ -825,14 +815,12 @@ VITE_DEBUG=true
 uname -a
 python --version
 node --version
-docker --version
 
 # Service status
-docker-compose ps
 systemctl status redis
 
 # Logs
-docker-compose logs > logs.txt
+journalctl -u redis-server --no-pager | tail -100 > redis-logs.txt
 ```
 
 4. **Open GitHub Issue** with:

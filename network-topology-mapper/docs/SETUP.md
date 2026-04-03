@@ -5,7 +5,8 @@ Complete installation and configuration guide for Network Topology Mapper.
 ## Table of Contents
 
 - [System Requirements](#system-requirements)
-- [Quick Start with Docker](#quick-start-with-docker)
+- [Quick Start (Local Development)](#quick-start-local-development)
+- [Optional Demo Network (Docker)](#optional-demo-network-docker)
 - [Local Development Setup](#local-development-setup)
 - [Configuration](#configuration)
 - [Database Setup](#database-setup)
@@ -31,21 +32,21 @@ Complete installation and configuration guide for Network Topology Mapper.
 
 ### Software Prerequisites
 
-**For Docker Deployment** (recommended):
-- Docker 20.10+
-- Docker Compose 2.0+
-
-**For Local Development**:
+**Required for Local Development**:
 - Python 3.11+
 - Node.js 18+
 - Redis 7.0+
 - nmap (for network scanning)
 
+**Optional (Demo Network Lab Only)**:
+- Docker 20.10+
+- Docker Compose 2.0+
+
 ---
 
-## Quick Start with Docker
+## Quick Start (Local Development)
 
-The fastest way to get started is using the demo script.
+Use this path for day-to-day development. Docker is not required.
 
 ### 1. Clone Repository
 
@@ -70,47 +71,107 @@ ANTHROPIC_API_KEY=sk-ant-your-key-here
 SCAN_DEFAULT_RANGE=192.168.0.0/16
 ```
 
-### 3. Start Services
+### 3. Backend Setup
+
+```bash
+cd backend
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+### 4. Start Redis (Local Service)
+
+Use your OS package/service manager to run Redis locally.
+
+**Ubuntu/Debian**:
+```bash
+sudo apt update
+sudo apt install -y redis-server
+sudo systemctl enable redis-server
+sudo systemctl start redis-server
+```
+
+**macOS**:
+```bash
+brew install redis
+brew services start redis
+```
+
+Verify:
+```bash
+redis-cli ping
+```
+
+Expected output: `PONG`
+
+### 5. Start Backend
+
+```bash
+cd backend
+source .venv/bin/activate
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### 6. Frontend Setup
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+### 7. Trigger First Scan
+
+```bash
+curl -X POST http://localhost:8000/api/scan \
+  -H "Content-Type: application/json" \
+  -d '{"target": "192.168.1.0/24"}'
+```
+
+### 8. Access Application
+
+- **Main Application**: http://localhost:3000
+- **API Documentation**: http://localhost:8000/docs
+
+---
+
+## Optional Demo Network (Docker)
+
+Use this only when you want the simulated lab network in `demo/`.
+
+### 1. Start Demo Environment
 
 ```bash
 ./demo.sh up
 ```
 
-This starts all services on the `nts-net` bridge network:
-- Frontend (React) on http://localhost:3000
-- Backend (FastAPI) on http://localhost:8000
-- Redis on localhost:6379
+This starts demo containers on the `nts-net` bridge network.
 
-### 4. Trigger First Scan
+### 2. Trigger Demo Scan
 
 ```bash
 ./demo.sh scan
 ```
 
-Or via API:
-
-```bash
-curl -X POST http://localhost:8000/api/scan \
-  -H "Content-Type: application/json" \
-  -d '{"target": "172.20.0.0/24"}'
-```
-
-### 5. Access Application
-
-- **Main Application**: http://localhost:3000
-- **API Documentation**: http://localhost:8000/docs
-
-### 6. Status Check
+### 3. Check Demo Status
 
 ```bash
 ./demo.sh status
+```
+
+### 4. Tear Down Demo
+
+```bash
+./demo.sh down
 ```
 
 ---
 
 ## Local Development Setup
 
-For development without Docker (editing Python or frontend code directly).
+For direct backend/frontend development.
 
 ### Backend Setup
 
@@ -142,11 +203,14 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-#### 4. Start Redis via Docker
+#### 4. Start Redis (Local Service)
 
 ```bash
-# Start Redis (not the full app stack)
-docker run -d --name redis -p 6379:6379 redis:7-alpine
+# Ubuntu/Debian
+sudo systemctl start redis-server
+
+# macOS (Homebrew)
+brew services start redis
 ```
 
 #### 5. Configure Environment
@@ -291,20 +355,6 @@ python -c "from app.db.sqlite_db import init_db; init_db()"
 
 Network scanning requires elevated privileges for nmap and Scapy.
 
-### Docker Setup
-
-The backend container runs with bridge networking (`nts-net`). Scanning capabilities are granted via `cap_add` in `docker-compose.yml`:
-
-```yaml
-services:
-  backend:
-    cap_add:
-      - NET_RAW
-      - NET_ADMIN
-```
-
-This is already configured — no changes needed for the demo.
-
 ### Local Development Permissions
 
 **macOS**: nmap installed via Homebrew runs with the required capabilities by default.
@@ -343,8 +393,11 @@ sudo setcap cap_net_raw,cap_net_admin=eip $(which python3.11)
 **Error: "Redis connection refused"**
 
 ```bash
-docker start redis
-# or: docker run -d --name redis -p 6379:6379 redis:7-alpine
+# Ubuntu/Debian
+sudo systemctl start redis-server
+
+# macOS
+brew services start redis
 ```
 
 ### Frontend Won't Start
@@ -373,7 +426,7 @@ npx kill-port 3000
 
 - Reduce scan intensity
 - Reduce target subnet size
-- Check backend logs: `docker logs network-mapper-backend`
+- Check backend logs in your active `uvicorn` terminal output
 
 ### Database Issues
 
@@ -389,7 +442,7 @@ npx kill-port 3000
 
 - Reduce visible nodes with filters
 - Try dagre layout (faster than force-directed for large graphs)
-- Increase hardware resources allocated to Docker
+- Profile frontend render performance in browser DevTools
 
 ---
 

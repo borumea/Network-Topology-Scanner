@@ -6,9 +6,27 @@ Network discovery and visualization tool. Scans your LAN with nmap + SNMP + pass
 
 ---
 
-## Quickstart (Demo Mode)
+## Quickstart (Local Development)
 
-Requires Docker only.
+Local development is the default workflow. Docker is optional and used for the demo lab only.
+
+```bash
+cd network-topology-mapper/backend
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+
+cd ../frontend
+npm install
+npm run dev
+```
+
+Open http://localhost:3000 to see the topology graph.
+
+## Optional Demo Mode (Docker)
+
+Use this mode when you want the simulated network devices in `demo/`.
 
 ```bash
 cd network-topology-mapper
@@ -16,8 +34,6 @@ cd network-topology-mapper
 ./demo.sh scan    # triggers scan against demo network
 ./demo.sh status  # health check
 ```
-
-Open http://localhost:3000 to see the topology graph.
 
 The demo network has: nginx web server, Postgres DB, file server (SSH+SMB), JetDirect printer, SNMP device — all on `nts-net` (172.20.0.0/24).
 
@@ -29,6 +45,12 @@ The demo network has: nginx web server, Postgres DB, file server (SSH+SMB), JetD
 
 ## Prerequisites
 
+- Python 3.11+
+- Node.js 18+
+- nmap
+- Redis 7 (optional, recommended for pub/sub)
+
+Optional for demo mode:
 - Docker 20.10+ and Docker Compose 2.0+
 - 4 GB RAM available for Docker
 
@@ -63,7 +85,7 @@ curl http://localhost:8000/api/topology/stats | jq
 ## Docs
 
 - `CLAUDE.md` — agent constitution, directory structure, sacred rules
-- `QUICK_START_GUIDE.md` — demo quickstart
+- `QUICK_START_GUIDE.md` — local quickstart + optional demo mode
 - `INSTALL_GUIDE.md` — database setup for local dev
 - `docs/ARCHITECTURE.md` — system architecture, scan pipeline, data flow
 - `docs/API.md` — full API reference

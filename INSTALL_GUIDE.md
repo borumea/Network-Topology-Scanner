@@ -1,6 +1,6 @@
 # Installation Guide
 
-> **Recommended:** Use Demo Mode for development — no manual installation required. Run `./demo.sh up` from `network-topology-mapper/`. This guide covers manual setup for local bare-metal development.
+> **Recommended:** Use local bare-metal setup for development. Demo mode is optional and mainly useful when you want simulated network devices via `./demo.sh up` from `network-topology-mapper/`.
 
 ---
 

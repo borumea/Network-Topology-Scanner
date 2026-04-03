@@ -6,7 +6,7 @@
 
 Network Topology Scanner (NTS) is a network discovery and visualization tool that scans your LAN, infers device connections, and renders an interactive topology graph. It uses nmap, SNMP, and passive scanning to build a SQLite + NetworkX topology database, then serves it to a React frontend via FastAPI WebSocket. An IsolationForest model flags anomalous devices. Claude API generates natural language resilience reports.
 
-The project targets small-to-medium networks (home labs, small offices). The team uses Docker Compose for all development and demo work.
+The project targets small-to-medium networks (home labs, small offices). The team uses local bare-metal development by default; Docker Compose is optional for demo network simulation.
 
 ## Directory Structure
 
@@ -118,7 +118,7 @@ Network-Topology-Scanner/
 
 1. **Do NOT create new top-level directories** inside `network-topology-mapper/` without team discussion.
 2. **Do NOT move files** between `backend/app/` subdirectories without understanding the import chain.
-3. **Do NOT modify** `docker-compose.yml` service names or `nts-net` network configuration — other compose files depend on it.
+3. **Do NOT modify** optional demo `docker-compose.yml` service names or `nts-net` network configuration — other compose files depend on it.
 4. **Do NOT add Celery back.** Scheduling uses asyncio in `main.py` lifespan. This was a deliberate architectural decision.
 5. **Do NOT commit `.env` files.** Use `.env.example` as the template. `.env.demo` is committed intentionally (no secrets).
 6. **Do NOT modify `Research-Paper/`** without explicit team discussion — this is shared academic work.
@@ -145,12 +145,12 @@ Examples:
 feat(scanner): add LLDP neighbor discovery
 fix(frontend): handle empty topology gracefully
 docs: update API reference
-chore(docker): bump redis to 7.4
+chore(deps): bump redis client version
 ```
 
 Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`
 
-Scopes: `scanner`, `inference`, `graph`, `frontend`, `api`, `docker`, `demo`, `ai`
+Scopes: `scanner`, `inference`, `graph`, `frontend`, `api`, `demo`, `ai`, `deps`
 
 **Merge to `main` via PR. Never push directly to `main`.**
 
@@ -172,14 +172,14 @@ Do not change without team discussion.
 | Scanning | nmap (subprocess, NOT python-nmap), Scapy (passive), pysnmp, Netmiko |
 | Anomaly detection | scikit-learn IsolationForest |
 | AI reports | Anthropic Claude API |
-| Infra | Docker Compose, bridge networking (`nts-net`), nginx reverse proxy |
+| Infra | Local services by default; optional Docker Compose demo networking (`nts-net`); nginx reverse proxy |
 
 ---
 
 ## Key Architecture Decisions
 
-**Bridge networking (`nts-net`) — NOT `network_mode: host`.**
-Required for Mac compatibility. All inter-service communication uses Docker service names.
+**Optional demo bridge networking (`nts-net`) — NOT `network_mode: host`.**
+Required for Mac compatibility in demo mode.
 
 **Connection inference runs unconditionally as Phase 5 of every scan.**
 `scan_coordinator.py` runs 5 phases: active nmap → passive Scapy → SNMP → config pull → inference. Phase 5 (`connection_inference.py`) uses gateway + switch-aware strategies to infer edges even when LLDP is unavailable (home networks).
@@ -200,7 +200,17 @@ All device and connection data is persisted in SQLite with NetworkX used for in-
 ## Development Workflow
 
 ```bash
-# Run the full demo (requires Docker only):
+# Backend bare-metal dev (default for editing Python code):
+cd network-topology-mapper/backend
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+
+# Frontend dev:
+cd network-topology-mapper/frontend
+npm install && npm run dev
+
+# Optional demo network mode (requires Docker):
 cd network-topology-mapper
 ./demo.sh up        # Starts all services + demo network (~60s for healthy state)
 ./demo.sh scan      # Triggers a scan against 172.20.0.0/24
@@ -209,17 +219,6 @@ cd network-topology-mapper
 # Frontend:   http://localhost:3000
 # Backend API: http://localhost:8000/api
 # API docs:   http://localhost:8000/docs
-
-# Backend bare-metal dev (editing Python code):
-cd network-topology-mapper/backend
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-# Optionally start Redis via Docker for pubsub, then:
-uvicorn app.main:app --reload --port 8000
-
-# Frontend dev:
-cd network-topology-mapper/frontend
-npm install && npm run dev
 ```
 
 ---
@@ -228,8 +227,8 @@ npm install && npm run dev
 
 - **Backend:** `cd backend && python -m pytest tests/` — must pass
 - **Frontend:** `cd frontend && npm run build` — must succeed (no TypeScript errors)
-- **Docker config changed:** `./demo.sh down && ./demo.sh up` — all services must reach healthy state
-- **Scan logic changed:** `./demo.sh scan` — verify devices + edges appear in the frontend graph
+- **Optional demo Docker config changed:** `./demo.sh down && ./demo.sh up` — all services must reach healthy state
+- **Scan logic changed:** run a scan from local backend and verify devices + edges appear in the frontend graph
 
 ---
 

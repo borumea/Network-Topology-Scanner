@@ -78,9 +78,9 @@ Edges are stored in SQLite and analyzed with NetworkX in-memory graphs. The fron
 
 ---
 
-## Demo Network Architecture
+## Optional Demo Network Architecture (Docker)
 
-The Docker demo uses `docker-compose.demo.yml` as an overlay on top of `docker-compose.yml`. Five containers simulate a real network on the `nts-net` bridge (172.20.0.0/24):
+Docker is only used for the optional demo lab. The demo uses `docker-compose.demo.yml` as an overlay on top of `docker-compose.yml`. Five containers simulate a real network on the `nts-net` bridge (172.20.0.0/24):
 
 ```
 nts-net (172.20.0.0/24)
@@ -93,7 +93,7 @@ nts-net (172.20.0.0/24)
    └── snmp-device (alpine) ← port 161/UDP (SNMP)
 ```
 
-The backend uses nmap to scan 172.20.0.0/24, discovers these containers, runs connection inference, and stores the topology in SQLite.
+The backend uses nmap to scan 172.20.0.0/24, discovers these containers, runs connection inference, and stores the topology in SQLite. This demo setup is separate from the default local development workflow.
 
 ---
 
@@ -213,10 +213,11 @@ SQLite is the primary data store for all topology data:
 ## Security
 
 - No authentication implemented (planned for future)
-- Docker network isolation via `nts-net` bridge
+- Local development runs directly on host networking
+- Optional demo containers are isolated via the `nts-net` bridge
 - Redis requires authentication (configured in `.env`)
 - SNMP community string configurable
-- Scan capabilities granted via `cap_add: NET_RAW, NET_ADMIN` (not `network_mode: host`)
+- Scan capabilities must be granted on the host for local scanning (`setcap`/privileged execution)
 
 ---
 
@@ -230,4 +231,4 @@ SQLite is the primary data store for all topology data:
 
 **asyncio over Celery** — simpler ops, no broker to manage, sufficient for the scan frequency (minutes to hours, not seconds).
 
-**Bridge networking** — required for Mac compatibility; `network_mode: host` doesn't work on Mac Docker.
+**Optional demo bridge networking** — used by the demo lab for Mac compatibility; `network_mode: host` doesn't work on Mac Docker.

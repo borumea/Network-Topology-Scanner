@@ -1,8 +1,28 @@
 # Quick Start Guide
 
-## Demo Mode (Recommended — Zero Config)
+## Local Development (Recommended)
 
-The fastest path to a working topology graph. Uses Docker with 5 simulated network containers.
+The default path to a working topology graph runs directly on your machine.
+
+```bash
+cd network-topology-mapper/backend
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+
+cd ../frontend
+npm install
+npm run dev
+```
+
+Open http://localhost:3000 to see the topology graph.
+
+---
+
+## Optional Demo Mode (Docker)
+
+Use this mode when you want 5 simulated network devices.
 
 ```bash
 cd network-topology-mapper
@@ -67,9 +87,7 @@ curl http://localhost:8000/api/alerts | jq
 
 ---
 
-## Local Development (Without Docker)
-
-For bare-metal backend development, see `INSTALL_GUIDE.md`.
+For detailed local setup steps, see `INSTALL_GUIDE.md`.
 
 ---
 
@@ -81,13 +99,13 @@ For bare-metal backend development, see `INSTALL_GUIDE.md`.
 - Try `./demo.sh scan` instead of a manual curl
 
 **Services won't start:**
-- Ensure Docker has at least 4 GB RAM allocated
+- Ensure backend and frontend terminals are both running
 - Check for port conflicts: `lsof -i :3000; lsof -i :8000; lsof -i :7474`
-- Try `./demo.sh down && ./demo.sh up`
+- For demo mode only: try `./demo.sh down && ./demo.sh up`
 
 **Frontend shows empty graph after scan completes:**
 - Hard refresh: `Cmd+Shift+R` (macOS) or `Ctrl+Shift+R` (Linux)
-- Check backend logs: `docker logs network-topology-mapper-backend-1`
+- Check backend logs in the terminal running `uvicorn`
 
 ---
 
