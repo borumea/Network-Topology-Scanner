@@ -21,10 +21,6 @@ class Settings(BaseSettings):
     ssh_password: str = ""
     ssh_timeout: int = 30
 
-    # Claude API
-    anthropic_api_key: str = ""
-    claude_model: str = "claude-sonnet-4-5-20250929"
-
     # Scheduled scanning
     scan_interval_minutes: int = 5  # 0 = disabled
 

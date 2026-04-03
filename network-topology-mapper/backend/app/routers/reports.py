@@ -11,7 +11,7 @@ router = APIRouter(prefix="/api", tags=["reports"])
 
 
 @router.get("/reports/resilience")
-def get_resilience_report():
+async def get_resilience_report():
     resilience = resilience_scorer.calculate_global_resilience()
     spofs = spof_detector.find_spofs()
     topology = graph_builder.get_full_topology()
@@ -21,7 +21,7 @@ def get_resilience_report():
         "total_connections": len(topology.get("connections", [])),
     }
 
-    report = report_generator.generate_resilience_report(resilience, spofs, stats)
+    report = await report_generator.generate_resilience_report(resilience, spofs, stats)
     return report
 
 

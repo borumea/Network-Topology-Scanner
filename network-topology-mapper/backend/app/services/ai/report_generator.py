@@ -1,46 +1,52 @@
+import asyncio
 import logging
 import json
-from typing import Any
-
-from app.config import get_settings
+import shutil
+import subprocess
 
 logger = logging.getLogger(__name__)
 
 
 class ReportGenerator:
-    """Uses Claude API to generate natural language resilience reports."""
+    """Uses Claude Code headless to generate natural language resilience reports."""
 
     def __init__(self):
-        self._client = None
-        try:
-            import anthropic
-            settings = get_settings()
-            if settings.anthropic_api_key and settings.anthropic_api_key != "sk-ant-replace-me":
-                self._client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        except ImportError:
-            logger.warning("anthropic SDK not installed. Report generation unavailable.")
+        self._claude_path = shutil.which("claude")
 
     @property
     def available(self) -> bool:
-        return self._client is not None
+        return self._claude_path is not None
 
-    def generate_resilience_report(self, resilience_data: dict,
-                                    spofs: list[dict],
-                                    topology_stats: dict) -> dict:
-        if not self._client:
+    def _run_claude(self, prompt: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [self._claude_path, "-p",
+             "--output-format", "json", "--max-turns", "1"],
+            input=prompt, capture_output=True, text=True, timeout=120,
+        )
+
+    async def generate_resilience_report(self, resilience_data: dict,
+                                          spofs: list[dict],
+                                          topology_stats: dict) -> dict:
+        if not self._claude_path:
             return self._generate_fallback_report(resilience_data, spofs, topology_stats)
 
         try:
-            settings = get_settings()
             prompt = self._build_prompt(resilience_data, spofs, topology_stats)
 
-            message = self._client.messages.create(
-                model=settings.claude_model,
-                max_tokens=2000,
-                messages=[{"role": "user", "content": prompt}],
-            )
+            proc = await asyncio.to_thread(self._run_claude, prompt)
 
-            report_text = message.content[0].text
+            if proc.returncode != 0:
+                logger.error("Claude Code failed (exit %d): %s",
+                             proc.returncode, proc.stderr)
+                return self._generate_fallback_report(resilience_data, spofs, topology_stats)
+
+            result = json.loads(proc.stdout)
+
+            if result.get("is_error"):
+                logger.error("Claude Code returned error: %s", result.get("result", ""))
+                return self._generate_fallback_report(resilience_data, spofs, topology_stats)
+
+            report_text = result.get("result", "")
 
             return {
                 "generated": True,
@@ -50,8 +56,11 @@ class ReportGenerator:
                 "spofs": spofs,
                 "stats": topology_stats,
             }
+        except subprocess.TimeoutExpired:
+            logger.error("Claude Code timed out after 120s")
+            return self._generate_fallback_report(resilience_data, spofs, topology_stats)
         except Exception as e:
-            logger.error("Claude API report generation failed: %s", e)
+            logger.error("Claude Code report generation failed: %r", e, exc_info=True)
             return self._generate_fallback_report(resilience_data, spofs, topology_stats)
 
     def _build_prompt(self, resilience_data: dict, spofs: list, stats: dict) -> str:
@@ -71,9 +80,9 @@ class ReportGenerator:
 Generate a report with:
 1. **Executive Summary** (2-3 sentences)
 2. **Critical Findings** (numbered list, top 3-5 issues)
-3. **Prioritized Recommendations** (numbered list with estimated impact)
+3. **Prioritized Recommendations** (numbered list — end each recommendation with "Estimated impact: ..." on the same line)
 
-Keep the tone professional but accessible. Use specific device names and numbers from the data."""
+Keep the tone professional but accessible. Use specific device names and numbers from the data. Use ## for section headings. Do not use markdown tables."""
 
     def _generate_fallback_report(self, resilience_data: dict, spofs: list,
                                    stats: dict) -> dict:
