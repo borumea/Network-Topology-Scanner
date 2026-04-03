@@ -1,6 +1,6 @@
 # Network Topology Scanner
 
-Network discovery and visualization tool. Scans your LAN with nmap + SNMP + passive capture, infers device connections, and renders an interactive topology graph. FastAPI backend, React + Cytoscape.js frontend, Neo4j graph database.
+Network discovery and visualization tool. Scans your LAN with nmap + SNMP + passive capture, infers device connections, and renders an interactive topology graph. FastAPI backend, React + Cytoscape.js frontend, SQLite + NetworkX topology database.
 
 > **AI agents:** Read `CLAUDE.md` first — it is the authoritative reference for this codebase.
 
@@ -43,7 +43,6 @@ For local (non-Docker) development, see `INSTALL_GUIDE.md`.
 | Frontend | http://localhost:3000 |
 | Backend API | http://localhost:8000 |
 | API docs | http://localhost:8000/docs |
-| Neo4j browser | http://localhost:7474 (neo4j / changeme) |
 
 ---
 
@@ -76,4 +75,4 @@ curl http://localhost:8000/api/topology/stats | jq
 
 ## Tech Stack
 
-Python 3.11 / FastAPI / Neo4j 5 / Redis 7 / SQLite — React 18 / TypeScript / Vite / Cytoscape.js / Zustand / Tailwind CSS
+Python 3.11 / FastAPI / SQLite + NetworkX / Redis 7 — React 18 / TypeScript / Vite / Cytoscape.js / Zustand / Tailwind CSS

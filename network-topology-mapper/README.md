@@ -28,7 +28,7 @@ A real-time network topology mapping and analysis platform that discovers device
 
 ### Backend
 - **FastAPI** (Python 3.11+)
-- **Neo4j** graph database for device/connection storage
+- **SQLite** + **NetworkX** for device/connection storage and graph analysis
 - **Redis** for caching and real-time pub/sub
 - **SQLite** for scan history, alerts, topology snapshots, and settings
 - **asyncio-based task scheduler** for periodic scans and post-scan analysis
@@ -68,7 +68,7 @@ cd network-topology-mapper
 - nmap discovers all containers on the bridge network
 - Connection inference creates star-topology edges through the Docker gateway (172.20.0.1)
 - Frontend at http://localhost:3000 renders the live topology graph
-- Neo4j Browser at http://localhost:7474 (neo4j / changeme) for raw graph inspection
+- Topology stored in SQLite, graph analysis via NetworkX
 
 **Tear down:**
 ```bash
@@ -82,7 +82,7 @@ cd network-topology-mapper
 - Docker & Docker Compose
 - Python 3.11+ (for local development)
 - Node.js 18+ (for frontend development)
-- Neo4j, Redis (or use Docker Compose)
+- Redis (optional — app falls back to in-memory)
 
 ### Using Docker Compose
 
@@ -106,7 +106,6 @@ docker-compose up -d
 4. Access the application:
 - Frontend: http://localhost:3000
 - Backend API: http://localhost:8000
-- Neo4j Browser: http://localhost:7474
 
 ### Local Development
 
@@ -272,12 +271,7 @@ npm test
 Key environment variables (see `.env.example` for full list):
 
 ```bash
-# Neo4j
-NEO4J_URI=bolt://localhost:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=your-password
-
-# Redis
+# Redis (optional)
 REDIS_URL=redis://localhost:6379/0
 
 # Scanning
@@ -294,7 +288,7 @@ AGENT_MODE=alert  # alert | interactive | autonomous
 ## Security Considerations
 
 - Network scanning requires elevated privileges (NET_RAW, NET_ADMIN capabilities)
-- Secure your Neo4j and Redis instances with strong passwords
+- Secure your Redis instance with a strong password
 - Keep SNMP community strings confidential
 - Restrict API access in production environments
 - Review firewall rules before active scanning
@@ -308,15 +302,6 @@ AGENT_MODE=alert  # alert | interactive | autonomous
 - Limit WebSocket client connections in production
 
 ## Troubleshooting
-
-### Neo4j Connection Issues
-```bash
-# Check Neo4j status
-docker-compose logs neo4j
-
-# Verify credentials
-docker exec -it neo4j cypher-shell -u neo4j -p your-password
-```
 
 ### Scanning Permission Errors
 Ensure Docker container has proper capabilities:
@@ -372,4 +357,4 @@ For issues, questions, or suggestions:
 - **Passive scanning** (Scapy ARP sniffing) is disabled in demo mode — Docker bridge networking doesn't support raw packet capture across containers. Only nmap active scanning runs.
 - **SNMP polling** requires the `snmp-device` demo container to respond to the `public` community string on UDP 161. If the container starts slowly, the first scan may miss it.
 - **Settings changes** (via `PUT /api/settings`) take effect immediately for stored values, but `scan_interval_minutes` only applies to new scheduler instances. Restart the backend container to change the scan interval.
-- **Neo4j memory**: Default Neo4j Docker config uses 512MB heap. For large topologies (500+ devices), increase `NEO4J_server_memory_heap_max__size` in `docker-compose.yml`.
+- **Large topologies** (500+ devices) may slow down NetworkX graph analysis operations. Consider increasing scan intervals for very large networks.

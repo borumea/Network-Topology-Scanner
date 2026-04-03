@@ -71,49 +71,6 @@ nvm use 18
 
 ## Database Connection Problems
 
-### Neo4j Connection Refused
-
-**Problem**: `neo4j.exceptions.ServiceUnavailable: Unable to connect`
-
-**Diagnosis**:
-```bash
-# Check Neo4j status
-docker ps | grep neo4j
-# or
-sudo systemctl status neo4j
-
-# Test connection
-curl http://localhost:7474
-```
-
-**Solutions**:
-
-1. **Start Neo4j**:
-```bash
-# Docker
-docker-compose up -d neo4j
-
-# System service
-sudo systemctl start neo4j
-```
-
-2. **Check credentials**:
-```bash
-# Verify .env credentials match Neo4j password
-cat .env | grep NEO4J
-
-# Reset Neo4j password (if needed)
-docker exec -it neo4j cypher-shell -u neo4j -p current_password
-ALTER CURRENT USER SET PASSWORD FROM 'current_password' TO 'new_password';
-```
-
-3. **Check firewall**:
-```bash
-# Allow Neo4j ports
-sudo ufw allow 7474/tcp
-sudo ufw allow 7687/tcp
-```
-
 ### Redis Connection Failed
 
 **Problem**: `redis.exceptions.ConnectionError: Connection refused`
@@ -547,8 +504,8 @@ curl -X DELETE http://localhost:8000/api/scans/{scan_id}
 
 4. **Optimize database queries**:
 ```bash
-# Add Neo4j indexes
-# See SETUP.md for index creation queries
+# Ensure SQLite indexes exist
+# See SETUP.md for database configuration
 ```
 
 ### Memory Leaks
@@ -818,7 +775,6 @@ docker-compose up -d
 3. **Use service names**:
 ```bash
 # In .env, reference by service name
-NEO4J_URI=bolt://neo4j:7687  # not localhost
 REDIS_URL=redis://redis:6379  # not localhost
 ```
 
@@ -873,7 +829,7 @@ docker --version
 
 # Service status
 docker-compose ps
-systemctl status neo4j redis
+systemctl status redis
 
 # Logs
 docker-compose logs > logs.txt

@@ -866,7 +866,7 @@ GET /api/devices?limit=50&offset=100
 
 ## Snapshot Endpoints
 
-Topology snapshots capture Neo4j state at a point in time (stored in SQLite). Used for topology diff and history views.
+Topology snapshots capture topology state at a point in time (stored in SQLite). Used for topology diff and history views.
 
 ### List Snapshots
 

@@ -31,7 +31,6 @@ cd network-topology-mapper
 | Frontend | http://localhost:3000 |
 | Backend API | http://localhost:8000 |
 | API docs | http://localhost:8000/docs |
-| Neo4j browser | http://localhost:7474 (neo4j / changeme) |
 
 ---
 

@@ -38,7 +38,6 @@ Complete installation and configuration guide for Network Topology Mapper.
 **For Local Development**:
 - Python 3.11+
 - Node.js 18+
-- Neo4j 5.0+
 - Redis 7.0+
 - nmap (for network scanning)
 
@@ -64,9 +63,6 @@ cp .env.example .env
 Edit `.env` and update required variables:
 
 ```bash
-# Neo4j password (change this!)
-NEO4J_PASSWORD=your-secure-password
-
 # Claude API key (for AI reports)
 ANTHROPIC_API_KEY=sk-ant-your-key-here
 
@@ -83,7 +79,6 @@ SCAN_DEFAULT_RANGE=192.168.0.0/16
 This starts all services on the `nts-net` bridge network:
 - Frontend (React) on http://localhost:3000
 - Backend (FastAPI) on http://localhost:8000
-- Neo4j on http://localhost:7474
 - Redis on localhost:6379
 
 ### 4. Trigger First Scan
@@ -104,7 +99,6 @@ curl -X POST http://localhost:8000/api/scan \
 
 - **Main Application**: http://localhost:3000
 - **API Documentation**: http://localhost:8000/docs
-- **Neo4j Browser**: http://localhost:7474 (login: neo4j / your-password)
 
 ### 6. Status Check
 
@@ -148,16 +142,10 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-#### 4. Start Neo4j + Redis via Docker
+#### 4. Start Redis via Docker
 
 ```bash
-# Start just the databases (not the full app stack)
-docker run -d \
-  --name neo4j \
-  -p 7474:7474 -p 7687:7687 \
-  -e NEO4J_AUTH=neo4j/your-password \
-  neo4j:5-community
-
+# Start Redis (not the full app stack)
 docker run -d --name redis -p 6379:6379 redis:7-alpine
 ```
 
@@ -169,9 +157,6 @@ cp .env.example .env
 
 Edit `.env`:
 ```bash
-NEO4J_URI=bolt://localhost:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=your-password
 REDIS_URL=redis://localhost:6379/0
 SQLITE_PATH=./data/mapper.db
 SCAN_DEFAULT_RANGE=192.168.1.0/24
@@ -225,12 +210,6 @@ Frontend is now running at http://localhost:3000
 #### Database Configuration
 
 ```bash
-# Neo4j
-NEO4J_URI=bolt://localhost:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=changeme
-NEO4J_DATABASE=neo4j
-
 # Redis
 REDIS_URL=redis://localhost:6379/0
 REDIS_PASSWORD=
@@ -293,33 +272,6 @@ LOG_FORMAT=json
 
 ## Database Setup
 
-### Neo4j Configuration
-
-#### 1. Access Neo4j Browser
-
-Open http://localhost:7474
-
-#### 2. Initial Login
-
-- Username: `neo4j`
-- Password: `neo4j`
-- You'll be prompted to change password
-
-#### 3. Create Indexes (for performance)
-
-Run these Cypher queries:
-
-```cypher
-// Device indexes
-CREATE INDEX device_id IF NOT EXISTS FOR (d:Device) ON (d.id);
-CREATE INDEX device_ip IF NOT EXISTS FOR (d:Device) ON (d.ip);
-CREATE INDEX device_mac IF NOT EXISTS FOR (d:Device) ON (d.mac);
-CREATE INDEX device_hostname IF NOT EXISTS FOR (d:Device) ON (d.hostname);
-
-// VLAN index
-CREATE INDEX vlan_id IF NOT EXISTS FOR (v:VLAN) ON (v.id);
-```
-
 ### SQLite Configuration
 
 SQLite database is created automatically on first run.
@@ -381,17 +333,6 @@ Log out and back in for group changes to take effect.
 
 ### Backend Won't Start
 
-**Error: "Cannot connect to Neo4j"**
-
-```bash
-# Check Neo4j status
-docker ps | grep neo4j
-
-# Verify credentials in .env match Neo4j password
-# Check connectivity
-curl http://localhost:7474
-```
-
 **Error: "Permission denied" on nmap**
 
 ```bash
@@ -436,14 +377,6 @@ npx kill-port 3000
 
 ### Database Issues
 
-**Neo4j "Out of memory"**
-
-Edit Neo4j configuration (via Docker env vars in `docker-compose.yml`):
-```yaml
-NEO4J_server_memory_heap_initial__size: 2G
-NEO4J_server_memory_heap_max__size: 4G
-```
-
 **SQLite "Database locked"**
 
 - Ensure only one backend instance is running
@@ -472,7 +405,7 @@ After successful setup:
 
 ## Security Notes
 
-- Change default passwords for Neo4j and Redis in `.env`
+- Change default password for Redis in `.env`
 - Use HTTPS in production (nginx reverse proxy required)
 - Restrict network access to services
 - Rotate API keys regularly
