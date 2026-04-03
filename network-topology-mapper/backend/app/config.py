@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     scan_passive_interface: str = "eth0"
     snmp_community: str = "public"
     snmp_version: str = "2c"
+    enable_active_scan: bool = True
+    enable_passive_scan: bool = True
+    enable_snmp_scan: bool = True
 
     # SSH / Device Config
     ssh_username: str = "admin"

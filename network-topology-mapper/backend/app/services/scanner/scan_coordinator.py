@@ -220,9 +220,43 @@ class ScanCoordinator:
         return scan_id
 
     def _run_active_scan(self, scan_id: str, target: str, intensity: str):
+        last_progress_log = None
+
         def on_device_found(device):
+            nonlocal last_progress_log
+
+            if device.get("event") == "nmap_progress":
+                # Map nmap-internal percentage into active phase window (5% -> 34%).
+                nmap_percent = device.get("percent")
+                if isinstance(nmap_percent, (int, float)):
+                    phase_percent = 5 + int((float(nmap_percent) / 100.0) * 29)
+                else:
+                    phase_percent = 20
+
+                phase_percent = max(6, min(34, phase_percent))
+                msg = device.get("message") or "Nmap progress update"
+
+                # Avoid adding duplicate log lines on unchanged stats.
+                if msg != last_progress_log:
+                    self._publish_progress(
+                        scan_id,
+                        phase_percent,
+                        "active_scan",
+                        len(self._devices_cache),
+                        msg,
+                    )
+                    last_progress_log = msg
+                else:
+                    self._publish_progress(
+                        scan_id,
+                        phase_percent,
+                        "active_scan",
+                        len(self._devices_cache),
+                    )
+                return
+
             self._deduplicate_and_store(device)
-            self._publish_progress(scan_id, 20, "active_scan", len(self._devices_cache),
+            self._publish_progress(scan_id, 25, "active_scan", len(self._devices_cache),
                                    f"Discovered: {device.get('hostname') or device.get('ip', '?')}")
 
         devices = active_scanner.scan_network(target, intensity, callback=on_device_found)
