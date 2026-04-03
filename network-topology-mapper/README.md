@@ -26,7 +26,7 @@ A real-time network topology mapping and analysis platform that discovers device
 ### Backend
 - **FastAPI** (Python 3.11+)
 - **SQLite** + **NetworkX** for device/connection storage and graph analysis
-- **Redis** for caching and real-time pub/sub (optional — falls back to in-memory)
+- **Redis** for caching and real-time pub/sub (optional — Redis-backed features like pub/sub and cache are unavailable without it)
 - **asyncio-based task scheduler** for periodic scans and post-scan analysis
 - **scikit-learn** for anomaly detection (IsolationForest)
 
@@ -53,8 +53,8 @@ python -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\acti
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 
-# Frontend (separate terminal)
-cd frontend
+# Frontend (separate terminal, from project root)
+cd ../frontend
 npm install
 npm run dev
 ```
@@ -151,8 +151,11 @@ curl -X PUT http://localhost:8000/api/settings \
 Key environment variables (see `.env.example` for full list):
 
 ```bash
-# Redis (optional — app works without it)
+# Redis (optional — pub/sub and cache unavailable without it)
 REDIS_URL=redis://localhost:6379/0
+
+# AI Reports (optional — resilience reports require this)
+ANTHROPIC_API_KEY=your-api-key-here
 
 # Scanning
 SCAN_DEFAULT_RANGE=192.168.1.0/24

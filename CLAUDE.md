@@ -6,7 +6,7 @@
 
 Network Topology Scanner (NTS) is a network discovery and visualization tool that scans your LAN, infers device connections, and renders an interactive topology graph. It uses nmap, SNMP, and passive scanning to build a SQLite + NetworkX topology database, then serves it to a React frontend via FastAPI WebSocket. An IsolationForest model flags anomalous devices. Claude API generates natural language resilience reports.
 
-The project targets small-to-medium networks (home labs, small offices). Development runs bare metal (Python venv + npm). Redis is optional (app falls back to in-memory).
+The project targets small-to-medium networks (home labs, small offices). Development runs bare metal (Python venv + npm). Redis is optional but some features (pub/sub, caching) are unavailable without it.
 
 ## Directory Structure
 
@@ -166,7 +166,7 @@ Do not change without team discussion.
 | State management | Zustand |
 | Scanning | nmap (subprocess, NOT python-nmap), Scapy (passive), pysnmp, Netmiko |
 | Anomaly detection | scikit-learn IsolationForest |
-| AI reports | Claude Code (headless subprocess) |
+| AI reports | Anthropic Claude API (Python SDK) |
 | Infra | Bare metal (Python venv + npm). Redis optional. |
 
 ---

@@ -23,10 +23,10 @@ cd network-topology-mapper
 cd backend
 python -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000 &
+uvicorn app.main:app --reload --port 8000
 
-# Frontend
-cd ../frontend
+# Frontend (separate terminal)
+cd network-topology-mapper/frontend
 npm install
 npm run dev
 ```
@@ -60,6 +60,7 @@ curl -X POST http://localhost:8000/api/scans \
 ## Docs
 
 - `CLAUDE.md` — agent constitution, directory structure, sacred rules
+- `QUICK_START_GUIDE.md` — standalone quickstart path
 - `INSTALL_GUIDE.md` — bare-metal setup details
 - `docs/ARCHITECTURE.md` — system architecture, scan pipeline, data flow
 - `docs/API.md` — full API reference
