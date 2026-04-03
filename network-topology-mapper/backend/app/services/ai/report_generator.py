@@ -19,9 +19,9 @@ class ReportGenerator:
 
     def _run_claude(self, prompt: str) -> subprocess.CompletedProcess:
         return subprocess.run(
-            [self._claude_path, "-p", prompt,
+            [self._claude_path, "-p",
              "--output-format", "json", "--max-turns", "1"],
-            capture_output=True, timeout=120,
+            input=prompt, capture_output=True, text=True, timeout=120,
         )
 
     async def generate_resilience_report(self, resilience_data: dict,
@@ -37,10 +37,10 @@ class ReportGenerator:
 
             if proc.returncode != 0:
                 logger.error("Claude Code failed (exit %d): %s",
-                             proc.returncode, proc.stderr.decode())
+                             proc.returncode, proc.stderr)
                 return self._generate_fallback_report(resilience_data, spofs, topology_stats)
 
-            result = json.loads(proc.stdout.decode())
+            result = json.loads(proc.stdout)
 
             if result.get("is_error"):
                 logger.error("Claude Code returned error: %s", result.get("result", ""))
@@ -80,7 +80,7 @@ class ReportGenerator:
 Generate a report with:
 1. **Executive Summary** (2-3 sentences)
 2. **Critical Findings** (numbered list, top 3-5 issues)
-3. **Prioritized Recommendations** (numbered list — for each recommendation, put the estimated impact on its own line starting with "Estimated impact:")
+3. **Prioritized Recommendations** (numbered list — end each recommendation with "Estimated impact: ..." on the same line)
 
 Keep the tone professional but accessible. Use specific device names and numbers from the data. Use ## for section headings. Do not use markdown tables."""
 

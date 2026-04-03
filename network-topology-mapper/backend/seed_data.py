@@ -28,18 +28,20 @@ def seed(json_path: str) -> None:
     sqlite_db.connect()
     topology_db.connect()
 
-    for device in devices:
-        topology_db.upsert_device(device)
+    try:
+        for device in devices:
+            topology_db.upsert_device(device)
 
-    for conn in connections:
-        topology_db.upsert_connection(conn)
+        for conn in connections:
+            topology_db.upsert_connection(conn)
 
-    for dep in dependencies:
-        topology_db.upsert_dependency(dep)
+        for dep in dependencies:
+            topology_db.upsert_dependency(dep)
 
-    print(f"Seeded {len(devices)} devices, {len(connections)} connections, {len(dependencies)} dependencies")
-
-    topology_db.close()
+        print(f"Seeded {len(devices)} devices, {len(connections)} connections, {len(dependencies)} dependencies")
+    finally:
+        topology_db.close()
+        sqlite_db.close()
 
 
 if __name__ == "__main__":
