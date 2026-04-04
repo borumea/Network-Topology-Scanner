@@ -37,6 +37,9 @@ export const triggerScan = (type: string = 'full', target: string = '192.168.0.0
     body: JSON.stringify({ type, target, intensity }),
   });
 
+export const clearScans = () =>
+  request<any>('/scans/clear', { method: 'POST' });
+
 export const fetchScans = () => request<any>('/scans');
 
 export const fetchScan = (id: string) => request<any>(`/scans/${id}`);

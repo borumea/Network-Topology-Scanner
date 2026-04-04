@@ -30,6 +30,12 @@ def list_scans(limit: int = 50):
     return {"scans": scans}
 
 
+@router.post("/scans/clear")
+def clear_scans():
+    sqlite_db.clear_scans()
+    return {"status": "ok", "message": "Scan history cleared."}
+
+
 @router.get("/scans/{scan_id}")
 def get_scan(scan_id: str):
     scan = sqlite_db.get_scan(scan_id)
