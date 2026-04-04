@@ -1,5 +1,22 @@
 from pydantic_settings import BaseSettings
+from pydantic import model_validator
 from functools import lru_cache
+import ipaddress
+import socket
+
+
+def _detect_local_subnet() -> str:
+    """Detect the local network subnet (e.g. 192.168.1.0/24)."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(0.5)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        network = ipaddress.ip_network(f"{local_ip}/24", strict=False)
+        return str(network)
+    except Exception:
+        return "192.168.0.0/24"
 
 
 class Settings(BaseSettings):
@@ -9,12 +26,21 @@ class Settings(BaseSettings):
     # SQLite
     sqlite_path: str = "./data/mapper.db"
 
-    # Scanning
-    scan_default_range: str = "192.168.0.0/16"
+    # Scanning (empty/blank = auto-detect local subnet)
+    scan_default_range: str = ""
     scan_rate_limit: int = 1000
     scan_passive_interface: str = "eth0"
     snmp_community: str = "public"
     snmp_version: str = "2c"
+    enable_active_scan: bool = True
+    enable_passive_scan: bool = True
+    enable_snmp_scan: bool = True
+
+    @model_validator(mode="after")
+    def _auto_detect_subnet(self):
+        if not self.scan_default_range.strip():
+            self.scan_default_range = _detect_local_subnet()
+        return self
 
     # SSH / Device Config
     ssh_username: str = "admin"
@@ -38,7 +64,7 @@ class Settings(BaseSettings):
     agent_mode: str = "alert"
 
     class Config:
-        env_file = ".env"
+        env_file = ("../.env", ".env")
         env_file_encoding = "utf-8"
         extra = "ignore"
 

@@ -188,6 +188,11 @@ class SQLiteDB:
             result.append(d)
         return result
 
+    def clear_scans(self) -> None:
+        cursor = self._conn.cursor()
+        cursor.execute("DELETE FROM scans")
+        self._conn.commit()
+
     # Alert operations
     def create_alert(self, alert: dict) -> dict:
         cursor = self._conn.cursor()

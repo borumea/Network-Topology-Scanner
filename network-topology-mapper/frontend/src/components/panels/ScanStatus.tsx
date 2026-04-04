@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Play, Square, RefreshCw, Clock, ChevronDown, ChevronUp, Trash2, Terminal } from 'lucide-react';
-import { fetchScans, triggerScan, cancelScan, fetchSettings, clearTopology } from '../../lib/api';
+import { fetchScans, triggerScan, cancelScan, fetchSettings, clearTopology, clearScans } from '../../lib/api';
 import { formatTimeAgo } from '../../lib/graph-utils';
 import type { Scan, ScanProgress } from '../../types/topology';
 
@@ -75,6 +75,15 @@ export default function ScanStatus() {
       window.location.reload();
     } catch (err) {
       console.error('Failed to clear database:', err);
+    }
+  };
+
+  const handleClearScans = async () => {
+    try {
+      await clearScans();
+      setScans([]);
+    } catch (err) {
+      console.error('Failed to clear scans:', err);
     }
   };
 
@@ -259,9 +268,20 @@ export default function ScanStatus() {
         <div className="bg-nd-surface rounded-nd-card p-5 border border-nd-border">
           <div className="flex items-center justify-between mb-3">
             <span className="font-mono text-label uppercase tracking-[0.08em] text-nd-text-secondary">Recent Scans</span>
-            <button onClick={loadScans} className="text-nd-text-disabled hover:text-nd-text-primary transition-colors">
-              <RefreshCw size={14} strokeWidth={1.5} />
-            </button>
+            <div className="flex items-center gap-2">
+              {scans.length > 0 && (
+                <button
+                  onClick={handleClearScans}
+                  className="flex items-center gap-1 font-mono text-label uppercase tracking-[0.06em] text-nd-text-disabled hover:text-nd-accent transition-colors"
+                >
+                  <Trash2 size={12} strokeWidth={1.5} />
+                  Clear
+                </button>
+              )}
+              <button onClick={loadScans} className="text-nd-text-disabled hover:text-nd-text-primary transition-colors">
+                <RefreshCw size={14} strokeWidth={1.5} />
+              </button>
+            </div>
           </div>
 
           {loading && <div className="font-mono text-caption text-nd-text-disabled">[LOADING...]</div>}
