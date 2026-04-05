@@ -135,8 +135,9 @@ class TestNmapSweep:
         sd = SubnetDiscovery()
         sd._nmap_path = None
         parent = ipaddress.ip_network("192.168.0.0/16")
-        result = sd._nmap_sweep("192.168.0.0/16", parent)
-        assert result == set()
+        subnets, hosts = sd._nmap_sweep("192.168.0.0/16", parent)
+        assert subnets == set()
+        assert hosts == {}
 
     @patch("subprocess.run")
     def test_groups_hosts_by_24(self, mock_run):
@@ -158,12 +159,17 @@ class TestNmapSweep:
             stderr="",
         )
 
-        result = sd._nmap_sweep("192.168.0.0/16", parent)
-        assert "192.168.10.0/24" in result
-        assert "192.168.20.0/24" in result
-        assert "192.168.30.0/24" in result
-        assert "192.168.40.0/24" not in result  # host was down
-        assert len(result) == 3
+        subnets, hosts = sd._nmap_sweep("192.168.0.0/16", parent)
+        assert "192.168.10.0/24" in subnets
+        assert "192.168.20.0/24" in subnets
+        assert "192.168.30.0/24" in subnets
+        assert "192.168.40.0/24" not in subnets  # host was down
+        assert len(subnets) == 3
+        # Verify host tracking
+        assert "192.168.10.5" in hosts["192.168.10.0/24"]
+        assert "192.168.10.20" in hosts["192.168.10.0/24"]
+        assert "192.168.20.1" in hosts["192.168.20.0/24"]
+        assert "192.168.20.100" in hosts["192.168.20.0/24"]
 
     @patch("subprocess.run")
     def test_timeout_returns_empty(self, mock_run):
@@ -174,8 +180,9 @@ class TestNmapSweep:
 
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="nmap", timeout=300)
 
-        result = sd._nmap_sweep("192.168.0.0/16", parent)
-        assert result == set()
+        subnets, hosts = sd._nmap_sweep("192.168.0.0/16", parent)
+        assert subnets == set()
+        assert hosts == {}
 
 
 class TestCheckArpTable:
@@ -196,22 +203,54 @@ Interface: 192.168.1.100 --- 0x6
 """,
         )
 
-        result = sd._check_arp_table(parent)
-        assert "192.168.1.0/24" in result
-        assert "192.168.10.0/24" in result
-        assert "192.168.20.0/24" in result
-        assert "10.0.0.0/24" not in result  # outside parent
+        subnets, hosts = sd._check_arp_table(parent)
+        assert "192.168.1.0/24" in subnets
+        assert "192.168.10.0/24" in subnets
+        assert "192.168.20.0/24" in subnets
+        assert "10.0.0.0/24" not in subnets  # outside parent
+        assert "192.168.1.1" in hosts["192.168.1.0/24"]
 
 
 class TestDiscoverSubnetsCallback:
-    @patch.object(SubnetDiscovery, "_nmap_sweep", return_value={"192.168.10.0/24", "192.168.20.0/24"})
-    @patch.object(SubnetDiscovery, "_check_arp_table", return_value={"192.168.10.0/24"})
+    @patch.object(SubnetDiscovery, "_get_local_ips", return_value={"192.168.1.100"})
+    @patch.object(SubnetDiscovery, "_nmap_sweep", return_value=(
+        {"192.168.10.0/24", "192.168.20.0/24"},
+        {"192.168.10.0/24": {"192.168.10.5", "192.168.10.20"}, "192.168.20.0/24": {"192.168.20.1", "192.168.20.100"}},
+    ))
+    @patch.object(SubnetDiscovery, "_check_arp_table", return_value=(
+        {"192.168.10.0/24"},
+        {"192.168.10.0/24": {"192.168.10.5"}},
+    ))
     @patch.object(SubnetDiscovery, "_read_routing_table", return_value={"192.168.1.0/24"})
-    def test_combines_all_sources_and_deduplicates(self, mock_routes, mock_arp, mock_sweep):
+    def test_combines_all_sources_and_deduplicates(self, mock_routes, mock_arp, mock_sweep, mock_ips):
         sd = SubnetDiscovery()
         messages = []
         result = sd.discover_subnets("192.168.0.0/16", callback=lambda m: messages.append(m))
 
         # Should have 3 unique subnets, sorted
+        # 192.168.1.0/24 from routing table (no host data, so included)
+        # 192.168.10.0/24 has non-local hosts, included
+        # 192.168.20.0/24 has non-local hosts, included
         assert result == ["192.168.1.0/24", "192.168.10.0/24", "192.168.20.0/24"]
         assert len(messages) > 0  # callback was called
+
+    @patch.object(SubnetDiscovery, "_get_local_ips", return_value={"192.168.50.70", "192.168.56.1", "192.168.170.1"})
+    @patch.object(SubnetDiscovery, "_nmap_sweep", return_value=(
+        {"192.168.50.0/24", "192.168.56.0/24", "192.168.170.0/24"},
+        {
+            "192.168.50.0/24": {"192.168.50.1", "192.168.50.70", "192.168.50.100"},
+            "192.168.56.0/24": {"192.168.56.1"},
+            "192.168.170.0/24": {"192.168.170.1"},
+        },
+    ))
+    @patch.object(SubnetDiscovery, "_check_arp_table", return_value=(set(), {}))
+    @patch.object(SubnetDiscovery, "_read_routing_table", return_value=set())
+    def test_filters_virtual_adapter_subnets(self, mock_routes, mock_arp, mock_sweep, mock_ips):
+        sd = SubnetDiscovery()
+        result = sd.discover_subnets("192.168.0.0/16")
+
+        # Only 192.168.50.0/24 has non-local hosts (50.1 and 50.100)
+        # 192.168.56.0/24 and 192.168.170.0/24 only have local IPs
+        assert result == ["192.168.50.0/24"]
+        assert "192.168.56.0/24" not in result
+        assert "192.168.170.0/24" not in result

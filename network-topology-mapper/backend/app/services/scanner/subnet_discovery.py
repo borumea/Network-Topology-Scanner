@@ -3,6 +3,7 @@ import logging
 import platform
 import re
 import shutil
+import socket
 import subprocess
 import xml.etree.ElementTree as ET
 from typing import Optional
@@ -23,7 +24,9 @@ class SubnetDiscovery:
         1. Read the OS routing table for known subnets within parent_range.
         2. Run a fast nmap ping sweep across parent_range.
         3. Group responding hosts by /24 to identify active subnets.
-        4. Return deduplicated, sorted list of /24 CIDR strings.
+        4. Filter out subnets where the only host is the local machine
+           (virtual adapters like VMware, VirtualBox, Hyper-V).
+        5. Return deduplicated, sorted list of /24 CIDR strings.
         """
         try:
             parent_net = ipaddress.ip_network(parent_range, strict=False)
@@ -36,6 +39,8 @@ class SubnetDiscovery:
             return [str(parent_net)]
 
         discovered: set[str] = set()
+        # Track live IPs per subnet from sweep — used to filter virtual adapters
+        hosts_per_subnet: dict[str, set[str]] = {}
 
         # Step 1: routing table
         if callback:
@@ -49,28 +54,71 @@ class SubnetDiscovery:
         # Step 2: fast nmap sweep
         if callback:
             callback(f"Running fast discovery sweep on {parent_range}...")
-        sweep_subnets = self._nmap_sweep(parent_range, parent_net)
+        sweep_subnets, sweep_hosts = self._nmap_sweep(parent_range, parent_net)
         discovered.update(sweep_subnets)
+        for subnet_str, ips in sweep_hosts.items():
+            hosts_per_subnet.setdefault(subnet_str, set()).update(ips)
         logger.info("Nmap sweep: found %d active subnets within %s", len(sweep_subnets), parent_range)
         if callback and sweep_subnets:
             callback(f"Network sweep: {len(sweep_subnets)} active subnets detected")
 
         # Step 3: also check ARP table for additional subnets
-        arp_subnets = self._check_arp_table(parent_net)
+        arp_subnets, arp_hosts = self._check_arp_table(parent_net)
         discovered.update(arp_subnets)
+        for subnet_str, ips in arp_hosts.items():
+            hosts_per_subnet.setdefault(subnet_str, set()).update(ips)
         if arp_subnets:
             logger.info("ARP table: found %d additional subnets", len(arp_subnets))
             if callback:
                 callback(f"ARP table: {len(arp_subnets)} additional subnets")
 
+        # Step 4: filter out virtual adapter subnets (only the local machine responds)
+        local_ips = self._get_local_ips()
+        logger.info("Local machine IPs: %s", local_ips)
+        filtered: set[str] = set()
+        for subnet_str in discovered:
+            hosts = hosts_per_subnet.get(subnet_str, set())
+            non_local_hosts = hosts - local_ips
+            if non_local_hosts:
+                filtered.add(subnet_str)
+            elif not hosts:
+                # No host data (came from routing table only) — include it,
+                # the scan will determine if there are real devices
+                filtered.add(subnet_str)
+            else:
+                logger.info("Filtering out %s — only local IPs responded (%s)", subnet_str, hosts)
+                if callback:
+                    callback(f"Skipping {subnet_str} (virtual adapter, no external hosts)")
+
         # Sort subnets by network address
-        sorted_subnets = sorted(discovered, key=lambda s: ipaddress.ip_network(s).network_address)
+        sorted_subnets = sorted(filtered, key=lambda s: ipaddress.ip_network(s).network_address)
         logger.info("Total discovered subnets: %d — %s", len(sorted_subnets), sorted_subnets)
 
         if callback:
             callback(f"Subnet discovery complete: {len(sorted_subnets)} subnets found")
 
         return sorted_subnets
+
+    @staticmethod
+    def _get_local_ips() -> set[str]:
+        """Get all IPv4 addresses assigned to this machine."""
+        local_ips: set[str] = set()
+        try:
+            hostname = socket.gethostname()
+            for info in socket.getaddrinfo(hostname, None, socket.AF_INET):
+                local_ips.add(info[4][0])
+        except Exception:
+            pass
+        # Also try the UDP trick for the primary IP
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.settimeout(0.1)
+            s.connect(("8.8.8.8", 80))
+            local_ips.add(s.getsockname()[0])
+            s.close()
+        except Exception:
+            pass
+        return local_ips
 
     def _read_routing_table(self, parent_net: ipaddress.IPv4Network) -> set[str]:
         """Parse OS routing table for subnets that fall within parent_net."""
@@ -187,11 +235,15 @@ class SubnetDiscovery:
 
         return subnets
 
-    def _nmap_sweep(self, parent_range: str, parent_net: ipaddress.IPv4Network) -> set[str]:
-        """Fast nmap ping sweep to find live hosts, then group by /24."""
+    def _nmap_sweep(self, parent_range: str, parent_net: ipaddress.IPv4Network) -> tuple[set[str], dict[str, set[str]]]:
+        """Fast nmap ping sweep to find live hosts, then group by /24.
+
+        Returns (subnets, hosts_per_subnet) where hosts_per_subnet maps
+        each subnet CIDR to the set of responding IP addresses.
+        """
         if not self._nmap_path:
             logger.warning("nmap not available for subnet discovery sweep")
-            return set()
+            return set(), {}
 
         # Use fast ping scan with high rate to quickly find live hosts
         cmd = [
@@ -208,26 +260,27 @@ class SubnetDiscovery:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         except subprocess.TimeoutExpired:
             logger.error("Subnet discovery sweep timed out after 300s")
-            return set()
+            return set(), {}
         except Exception as e:
             logger.error("Subnet discovery sweep failed: %s", e)
-            return set()
+            return set(), {}
 
         if result.returncode != 0:
             logger.error("Subnet discovery sweep failed (code %d): %s", result.returncode, result.stderr)
-            return set()
+            return set(), {}
 
         if not result.stdout:
-            return set()
+            return set(), {}
 
         try:
             root = ET.fromstring(result.stdout)
         except ET.ParseError as e:
             logger.error("Failed to parse sweep XML: %s", e)
-            return set()
+            return set(), {}
 
         # Extract live host IPs and group by /24
         subnets: set[str] = set()
+        hosts_per_subnet: dict[str, set[str]] = {}
         for host_el in root.findall("host"):
             status_el = host_el.find("status")
             if status_el is None or status_el.get("state") != "up":
@@ -240,36 +293,45 @@ class SubnetDiscovery:
                         ip = ipaddress.ip_address(ip_str)
                         subnet_24 = ipaddress.ip_network(f"{ip_str}/24", strict=False)
                         if self._within_parent(subnet_24, parent_net):
-                            subnets.add(str(subnet_24))
+                            subnet_str = str(subnet_24)
+                            subnets.add(subnet_str)
+                            hosts_per_subnet.setdefault(subnet_str, set()).add(ip_str)
                     except ValueError:
                         continue
 
         logger.info("Sweep found live hosts in %d subnets", len(subnets))
-        return subnets
+        return subnets, hosts_per_subnet
 
-    def _check_arp_table(self, parent_net: ipaddress.IPv4Network) -> set[str]:
-        """Check OS ARP table for additional subnets with known hosts."""
+    def _check_arp_table(self, parent_net: ipaddress.IPv4Network) -> tuple[set[str], dict[str, set[str]]]:
+        """Check OS ARP table for additional subnets with known hosts.
+
+        Returns (subnets, hosts_per_subnet).
+        """
         subnets: set[str] = set()
+        hosts_per_subnet: dict[str, set[str]] = {}
         try:
             result = subprocess.run(["arp", "-a"], capture_output=True, text=True, timeout=10)
             if result.returncode != 0:
-                return subnets
+                return subnets, hosts_per_subnet
         except Exception:
-            return subnets
+            return subnets, hosts_per_subnet
 
         for line in result.stdout.splitlines():
             match = re.match(r".*?(\d+\.\d+\.\d+\.\d+)", line)
             if not match:
                 continue
             try:
-                ip = ipaddress.ip_address(match.group(1))
-                subnet_24 = ipaddress.ip_network(f"{ip}/24", strict=False)
+                ip_str = match.group(1)
+                ip = ipaddress.ip_address(ip_str)
+                subnet_24 = ipaddress.ip_network(f"{ip_str}/24", strict=False)
                 if self._within_parent(subnet_24, parent_net):
-                    subnets.add(str(subnet_24))
+                    subnet_str = str(subnet_24)
+                    subnets.add(subnet_str)
+                    hosts_per_subnet.setdefault(subnet_str, set()).add(ip_str)
             except ValueError:
                 continue
 
-        return subnets
+        return subnets, hosts_per_subnet
 
     @staticmethod
     def _to_24(network: ipaddress.IPv4Network) -> Optional[ipaddress.IPv4Network]:
