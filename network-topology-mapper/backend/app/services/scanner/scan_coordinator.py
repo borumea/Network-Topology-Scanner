@@ -11,6 +11,7 @@ from app.services.scanner.snmp_poller import snmp_poller
 from app.services.scanner.config_puller import config_puller
 from app.services.graph.graph_builder import graph_builder
 from app.services.scanner.connection_inference import connection_inference
+from app.services.scanner.subnet_discovery import subnet_discovery
 from app.services.realtime.event_bus import event_bus
 from app.db.sqlite_db import sqlite_db
 from app.db.redis_client import redis_client
@@ -50,6 +51,43 @@ class ScanCoordinator:
             "devices_found": devices_found,
             "log_messages": list(self._scan_log),
         })
+
+    def _resolve_targets(self, target: str, scan_id: str) -> list[str]:
+        """Resolve target string into a list of CIDR ranges to scan.
+
+        Handles:
+        - "auto": runs subnet auto-discovery using SCAN_DEFAULT_RANGE as parent
+        - "auto:10.0.0.0/8": runs auto-discovery with explicit parent range
+        - "192.168.10.0/24,192.168.20.0/24": comma-separated explicit subnets
+        - "192.168.1.0/24": single subnet (original behavior)
+        """
+        if target.startswith("auto"):
+            # Determine parent range for discovery
+            if ":" in target:
+                parent_range = target.split(":", 1)[1].strip()
+            else:
+                settings = get_settings()
+                parent_range = settings.scan_default_range
+
+            self._publish_progress(scan_id, 1, "subnet_discovery", 0,
+                                   f"Discovering subnets in {parent_range}...")
+
+            def on_discovery_msg(msg):
+                self._publish_progress(scan_id, 2, "subnet_discovery", 0, msg)
+
+            subnets = subnet_discovery.discover_subnets(parent_range, callback=on_discovery_msg)
+
+            if not subnets:
+                logger.warning("Auto-discovery found no subnets, falling back to %s", parent_range)
+                self._scan_log.append(f"No subnets discovered, scanning {parent_range} directly")
+                return [parent_range]
+
+            return subnets
+
+        if "," in target:
+            return [t.strip() for t in target.split(",") if t.strip()]
+
+        return [target]
 
     def start_scan(self, scan_type: str = "full", target: str = "192.168.0.0/24",
                    intensity: str = "normal", scan_id: Optional[str] = None) -> str:
@@ -94,64 +132,97 @@ class ScanCoordinator:
                                f"Starting {scan_type} scan on {target}")
 
         try:
+            # Resolve targets (auto-discovery, comma-separated, or single)
+            scan_targets = self._resolve_targets(target, scan_id)
+            total_subnets = len(scan_targets)
+            logger.info("Resolved %d scan targets: %s", total_subnets, scan_targets)
+
+            if total_subnets > 1:
+                self._publish_progress(scan_id, 3, "multi_subnet", 0,
+                                       f"Scanning {total_subnets} subnets: {', '.join(scan_targets)}")
+
+            # Update scan record with resolved targets
+            if target.startswith("auto") or "," in target:
+                sqlite_db.update_scan(scan_id, {
+                    "target_range": ", ".join(scan_targets),
+                })
+
             settings = get_settings()
-            logger.debug("Scan settings: enable_active=%s, enable_passive=%s, enable_snmp=%s",
-                         settings.enable_active_scan, settings.enable_passive_scan, settings.enable_snmp_scan)
 
-            # Phase 1: Active scan (nmap)
-            phase1_run = scan_type in ("active", "full") and settings.enable_active_scan
-            logger.info("Phase 1 (active nmap): %s (scan_type=%s, enable_active=%s)",
-                        "RUNNING" if phase1_run else "SKIPPED", scan_type, settings.enable_active_scan)
-            if phase1_run:
-                self._publish_progress(scan_id, 5, "active_scan", 0,
-                                       "Phase 1: Running nmap host discovery...")
-                self._run_active_scan(scan_id, target, intensity)
-                self._publish_progress(scan_id, 35, "active_scan", len(self._devices_cache),
-                                       f"Phase 1 complete: {len(self._devices_cache)} devices found")
-            else:
-                self._scan_log.append("Phase 1: Active scan skipped")
-            logger.info("After Phase 1: %d devices in cache", len(self._devices_cache))
+            # Scan each subnet through phases 1-4, accumulating all devices
+            for subnet_idx, subnet_target in enumerate(scan_targets):
+                subnet_label = f"[{subnet_idx + 1}/{total_subnets}]" if total_subnets > 1 else ""
+                # Calculate progress offsets so each subnet gets an equal slice of 0-85%
+                base_pct = int((subnet_idx / total_subnets) * 85) + 3
+                subnet_pct_range = int(85 / total_subnets)
 
-            # Phase 2: Passive scan (scapy ARP/DNS/DHCP sniffing)
-            phase2_run = scan_type in ("passive", "full") and settings.enable_passive_scan
-            logger.info("Phase 2 (passive scapy): %s (scan_type=%s, enable_passive=%s)",
-                        "RUNNING" if phase2_run else "SKIPPED", scan_type, settings.enable_passive_scan)
-            if phase2_run:
-                self._publish_progress(scan_id, 40, "passive_scan", len(self._devices_cache),
-                                       "Phase 2: Listening for network traffic...")
-                self._run_passive_scan(scan_id)
-                self._publish_progress(scan_id, 50, "passive_scan", len(self._devices_cache),
-                                       f"Phase 2 complete: {len(self._devices_cache)} devices total")
-            else:
-                self._scan_log.append("Phase 2: Passive scan skipped")
-            logger.info("After Phase 2: %d devices in cache", len(self._devices_cache))
+                if total_subnets > 1:
+                    self._publish_progress(scan_id, base_pct, "active_scan", len(self._devices_cache),
+                                           f"{subnet_label} Scanning subnet {subnet_target}...")
 
-            # Phase 3: SNMP poll (device details for SNMP-capable devices)
-            phase3_run = scan_type in ("snmp", "full") and settings.enable_snmp_scan
-            logger.info("Phase 3 (SNMP poll): %s (scan_type=%s, enable_snmp=%s)",
-                        "RUNNING" if phase3_run else "SKIPPED", scan_type, settings.enable_snmp_scan)
-            if phase3_run:
-                self._publish_progress(scan_id, 55, "snmp_poll", len(self._devices_cache),
-                                       "Phase 3: Polling SNMP-capable devices...")
-                self._run_snmp_poll(scan_id)
-                self._publish_progress(scan_id, 70, "snmp_poll", len(self._devices_cache),
-                                       f"Phase 3 complete: {len(self._devices_cache)} devices total")
-            else:
-                self._scan_log.append("Phase 3: SNMP poll skipped")
-            logger.info("After Phase 3: %d devices in cache", len(self._devices_cache))
+                # Phase 1: Active scan (nmap)
+                phase1_run = scan_type in ("active", "full") and getattr(settings, "enable_active_scan", True)
+                logger.info("Phase 1 (active nmap) %s: %s (scan_type=%s)",
+                            subnet_label, "RUNNING" if phase1_run else "SKIPPED", scan_type)
+                if phase1_run:
+                    p = base_pct + int(subnet_pct_range * 0.05)
+                    self._publish_progress(scan_id, p, "active_scan", len(self._devices_cache),
+                                           f"{subnet_label} Phase 1: nmap discovery on {subnet_target}...")
+                    self._run_active_scan(scan_id, subnet_target, intensity)
+                    p = base_pct + int(subnet_pct_range * 0.5)
+                    self._publish_progress(scan_id, p, "active_scan", len(self._devices_cache),
+                                           f"{subnet_label} Phase 1 complete: {len(self._devices_cache)} devices")
+                else:
+                    self._scan_log.append(f"{subnet_label} Phase 1: Active scan skipped")
+                logger.info("After Phase 1 %s: %d devices in cache", subnet_label, len(self._devices_cache))
 
-            # Phase 4: Config pull (SSH + LLDP for manageable devices)
-            phase4_run = scan_type == "full"
-            logger.info("Phase 4 (config pull): %s", "RUNNING" if phase4_run else "SKIPPED")
-            if phase4_run:
-                self._publish_progress(scan_id, 80, "config_pull", len(self._devices_cache),
-                                       "Phase 4: Pulling device configurations via SSH...")
-                self._run_config_pull(scan_id)
-                self._publish_progress(scan_id, 85, "config_pull", len(self._devices_cache),
-                                       f"Phase 4 complete: {len(self._devices_cache)} devices total")
-            else:
-                self._scan_log.append("Phase 4: Config pull skipped")
-            logger.info("After Phase 4: %d devices in cache", len(self._devices_cache))
+                # Phase 2: Passive scan (scapy ARP/DNS/DHCP sniffing)
+                phase2_run = scan_type in ("passive", "full") and getattr(settings, "enable_passive_scan", False)
+                logger.info("Phase 2 (passive scapy) %s: %s", subnet_label,
+                            "RUNNING" if phase2_run else "SKIPPED")
+                if phase2_run:
+                    p = base_pct + int(subnet_pct_range * 0.55)
+                    self._publish_progress(scan_id, p, "passive_scan", len(self._devices_cache),
+                                           f"{subnet_label} Phase 2: Passive listening...")
+                    self._run_passive_scan(scan_id)
+                    p = base_pct + int(subnet_pct_range * 0.65)
+                    self._publish_progress(scan_id, p, "passive_scan", len(self._devices_cache),
+                                           f"{subnet_label} Phase 2 complete: {len(self._devices_cache)} devices")
+                else:
+                    self._scan_log.append(f"{subnet_label} Phase 2: Passive scan skipped")
+                logger.info("After Phase 2 %s: %d devices in cache", subnet_label, len(self._devices_cache))
+
+                # Phase 3: SNMP poll
+                phase3_run = scan_type in ("snmp", "full") and getattr(settings, "enable_snmp_scan", True)
+                logger.info("Phase 3 (SNMP) %s: %s", subnet_label,
+                            "RUNNING" if phase3_run else "SKIPPED")
+                if phase3_run:
+                    p = base_pct + int(subnet_pct_range * 0.7)
+                    self._publish_progress(scan_id, p, "snmp_poll", len(self._devices_cache),
+                                           f"{subnet_label} Phase 3: SNMP polling...")
+                    self._run_snmp_poll(scan_id)
+                    p = base_pct + int(subnet_pct_range * 0.8)
+                    self._publish_progress(scan_id, p, "snmp_poll", len(self._devices_cache),
+                                           f"{subnet_label} Phase 3 complete: {len(self._devices_cache)} devices")
+                else:
+                    self._scan_log.append(f"{subnet_label} Phase 3: SNMP poll skipped")
+
+                # Phase 4: Config pull
+                phase4_run = scan_type == "full"
+                logger.info("Phase 4 (config pull) %s: %s", subnet_label,
+                            "RUNNING" if phase4_run else "SKIPPED")
+                if phase4_run:
+                    p = base_pct + int(subnet_pct_range * 0.85)
+                    self._publish_progress(scan_id, p, "config_pull", len(self._devices_cache),
+                                           f"{subnet_label} Phase 4: SSH config pull...")
+                    self._run_config_pull(scan_id)
+                    p = base_pct + int(subnet_pct_range * 0.95)
+                    self._publish_progress(scan_id, p, "config_pull", len(self._devices_cache),
+                                           f"{subnet_label} Phase 4 complete: {len(self._devices_cache)} devices")
+                else:
+                    self._scan_log.append(f"{subnet_label} Phase 4: Config pull skipped")
+
+                logger.info("Subnet %s complete: %d total devices in cache", subnet_target, len(self._devices_cache))
 
             # Dump all cached devices before inference
             logger.debug("=== DEVICE CACHE BEFORE INFERENCE ===")
@@ -161,16 +232,29 @@ class ScanCoordinator:
                              dev.get("open_ports", []), dev.get("services", []))
             logger.debug("=== END DEVICE CACHE ===")
 
-            # Phase 5: Connection inference
+            # Phase 5: Connection inference (runs once across ALL discovered devices)
             logger.info("Phase 5 (connection inference): RUNNING with %d devices", len(self._devices_cache))
             self._publish_progress(scan_id, 90, "connection_inference", len(self._devices_cache),
-                                   "Phase 5: Inferring network connections...")
+                                   "Phase 5: Inferring network connections across all subnets...")
 
-            inferred_connections = connection_inference.infer_connections(
-                devices=self._devices_cache,
-                target_subnet=target,
-                lldp_data=self._lldp_data if self._lldp_data else None,
-            )
+            # For multi-subnet scans, run inference per subnet then combine
+            all_connections = []
+            for subnet_target in scan_targets:
+                conns = connection_inference.infer_connections(
+                    devices=self._devices_cache,
+                    target_subnet=subnet_target,
+                    lldp_data=self._lldp_data if self._lldp_data else None,
+                )
+                all_connections.extend(conns)
+
+            # Deduplicate connections by (source_id, target_id)
+            seen_edges: set[tuple[str, str]] = set()
+            inferred_connections = []
+            for conn in all_connections:
+                edge_key = (conn.get("source_id", ""), conn.get("target_id", ""))
+                if edge_key not in seen_edges:
+                    seen_edges.add(edge_key)
+                    inferred_connections.append(conn)
 
             logger.info("Connection inference returned %d edges", len(inferred_connections))
             for conn in inferred_connections:
@@ -205,7 +289,7 @@ class ScanCoordinator:
             _th.Thread(target=_run_analysis_bg, daemon=True).start()
 
             self._publish_progress(scan_id, 100, "completed", device_count,
-                                   f"Scan complete: {device_count} devices, {len(inferred_connections)} connections")
+                                   f"Scan complete: {device_count} devices, {len(inferred_connections)} connections across {total_subnets} subnet(s)")
 
         except Exception as e:
             logger.error("SCAN %s FAILED: %s", scan_id, e)

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Play, Square, RefreshCw, Clock, ChevronDown, ChevronUp, Trash2, Terminal } from 'lucide-react';
+import { Play, Square, RefreshCw, Clock, ChevronDown, ChevronUp, Trash2, Terminal, Radar } from 'lucide-react';
 import { fetchScans, triggerScan, cancelScan, fetchSettings, clearTopology } from '../../lib/api';
 import { formatTimeAgo } from '../../lib/graph-utils';
 import type { Scan, ScanProgress } from '../../types/topology';
@@ -127,6 +127,19 @@ export default function ScanStatus() {
             <div className="font-mono text-caption text-nd-text-disabled">[DETECTING...]</div>
           )}
 
+          {/* Auto-discover subnets */}
+          <button
+            onClick={() => handleStartScan('auto')}
+            className="w-full flex items-center gap-3 bg-nd-surface-raised rounded-nd-compact px-4 py-3 hover:border-nd-text-primary border border-nd-border transition-colors"
+          >
+            <Radar size={16} strokeWidth={1.5} className="text-nd-text-secondary shrink-0" />
+            <div className="flex-1 text-left">
+              <div className="font-mono text-body-sm text-nd-text-primary font-bold">Auto-Discover Subnets</div>
+              <div className="font-mono text-label text-nd-text-disabled mt-0.5">Finds all active subnets and scans each one</div>
+            </div>
+            <Play size={14} strokeWidth={1.5} className="text-nd-text-secondary shrink-0" />
+          </button>
+
           {/* Intensity */}
           <div className="flex items-center gap-4">
             <span className="font-mono text-label uppercase tracking-[0.08em] text-nd-text-disabled">Intensity:</span>
@@ -161,7 +174,7 @@ export default function ScanStatus() {
                 <input
                   value={scanTarget}
                   onChange={(e) => setScanTarget(e.target.value)}
-                  placeholder="e.g. 192.168.1.0/24"
+                  placeholder="e.g. 192.168.1.0/24 or 10.0.1.0/24,10.0.2.0/24"
                   className="flex-1 bg-transparent border-b border-nd-border-visible px-1 py-1.5 font-mono text-body-sm text-nd-text-primary outline-none focus:border-nd-text-primary transition-colors"
                 />
                 <button
