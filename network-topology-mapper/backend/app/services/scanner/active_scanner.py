@@ -1,4 +1,6 @@
+import ipaddress
 import logging
+import re
 import shutil
 import subprocess
 import uuid
@@ -142,7 +144,89 @@ class ActiveScanner:
             if callback:
                 callback(device)
 
-        logger.info("Active scan complete: %d devices found", len(devices))
+        logger.info("Nmap scan found %d devices", len(devices))
+
+        # Supplement with ARP table — catches devices that don't respond to TCP probes
+        arp_devices = self._read_arp_table(target)
+        nmap_ips = {d["ip"] for d in devices}
+        arp_added = 0
+        for arp_dev in arp_devices:
+            if arp_dev["ip"] not in nmap_ips:
+                devices.append(arp_dev)
+                arp_added += 1
+                if callback:
+                    callback(arp_dev)
+        if arp_added:
+            logger.info("ARP table added %d devices that nmap missed", arp_added)
+
+        logger.info("Active scan complete: %d devices total", len(devices))
+        return devices
+
+    def _read_arp_table(self, subnet: str) -> list[dict]:
+        """Read the OS ARP table and return device stubs for IPs on the target subnet.
+
+        This is instant and catches devices that don't respond to nmap TCP probes
+        (phones, IoT, smart TVs, etc.) because the OS has already seen their ARP traffic.
+        """
+        try:
+            network = ipaddress.ip_network(subnet, strict=False)
+        except ValueError:
+            return []
+
+        try:
+            result = subprocess.run(["arp", "-a"], capture_output=True, text=True, timeout=10)
+            if result.returncode != 0:
+                return []
+        except Exception as e:
+            logger.debug("ARP table read failed: %s", e)
+            return []
+
+        devices = []
+        now = datetime.utcnow().isoformat()
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            # Match IP and MAC — handles both Linux/macOS (colon-separated)
+            # and Windows (dash-separated) formats
+            match = re.match(
+                r".*?(\d+\.\d+\.\d+\.\d+)\s+"
+                r"([\da-fA-F]{2}[:-][\da-fA-F]{2}[:-][\da-fA-F]{2}[:-]"
+                r"[\da-fA-F]{2}[:-][\da-fA-F]{2}[:-][\da-fA-F]{2})\s+(\w+)",
+                line,
+            )
+            if not match:
+                continue
+
+            ip = match.group(1)
+            mac = match.group(2).upper().replace("-", ":")
+            entry_type = match.group(3).lower()
+
+            if entry_type == "static" or mac == "FF:FF:FF:FF:FF:FF":
+                continue
+
+            try:
+                if ipaddress.ip_address(ip) not in network:
+                    continue
+            except ValueError:
+                continue
+
+            devices.append({
+                "id": str(uuid.uuid4()),
+                "ip": ip,
+                "mac": mac,
+                "hostname": ip,
+                "device_type": "unknown",
+                "vendor": "",
+                "os": "",
+                "open_ports": [],
+                "services": [],
+                "first_seen": now,
+                "last_seen": now,
+                "discovery_method": "arp_table",
+                "status": "online",
+                "risk_score": 0.0,
+            })
+
+        logger.info("ARP table scan found %d devices on %s", len(devices), subnet)
         return devices
 
     def _guess_device_type(self, ports: list[int], services: list[str],
