@@ -1,7 +1,6 @@
 import type { DeviceType, ConnectionType, DeviceStatus } from '../types/topology';
 
-// Nothing light-mode: monochrome nodes. Device types differentiated by shape/icon,
-// not fill color. These are used only for the minimap dots and legend.
+// These are used only for the minimap dots and legend.
 export const DEVICE_TYPE_COLORS: Record<DeviceType, string> = {
   router: '#1A1A1A',
   switch: '#333333',
@@ -12,6 +11,22 @@ export const DEVICE_TYPE_COLORS: Record<DeviceType, string> = {
   iot: '#999999',
   printer: '#808080',
   unknown: '#CCCCCC',
+};
+
+export const DEVICE_TYPE_COLORS_DARK: Record<DeviceType, string> = {
+  router: '#FAFAFA',
+  switch: '#E0E0E0',
+  server: '#C0C0C0',
+  firewall: '#FAFAFA',
+  ap: '#A3A3A3',
+  workstation: '#808080',
+  iot: '#666666',
+  printer: '#808080',
+  unknown: '#404040',
+};
+
+export const getDeviceTypeColor = (type: DeviceType, isDark: boolean = false) => {
+  return isDark ? DEVICE_TYPE_COLORS_DARK[type] : DEVICE_TYPE_COLORS[type];
 };
 
 export const STATUS_COLORS: Record<DeviceStatus, string> = {

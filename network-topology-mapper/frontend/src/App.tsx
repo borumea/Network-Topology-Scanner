@@ -12,6 +12,8 @@ import RiskHeatmap from './components/dashboard/RiskHeatmap';
 import TimelineView from './components/dashboard/TimelineView';
 import DependencyMatrix from './components/dashboard/DependencyMatrix';
 import { useFilterStore } from './stores/filterStore';
+import { useSettingsStore } from './stores/settingsStore';
+import { useEffect } from 'react';
 
 function TopologyView() {
   const { rightPanelContent, selectedDeviceId } = useTopologyStore();
@@ -36,7 +38,8 @@ function DashboardView() {
 
   if (!stats) return <div className="p-6 font-mono text-caption text-nd-text-disabled">[LOADING...]</div>;
 
-  const typeEntries = Object.entries(stats.type_counts).sort((a, b) => b[1] - a[1]);
+  const typeEntries = Object.entries(stats.type_counts) as [string, number][];
+  typeEntries.sort((a, b) => b[1] - a[1]);
 
   return (
     <div className="h-full overflow-y-auto p-6">
@@ -61,7 +64,7 @@ function DashboardView() {
                         <div
                           key={i}
                           className="flex-1 h-full"
-                          style={{ backgroundColor: i < filled ? '#1A1A1A' : '#E8E8E8' }}
+                          style={{ backgroundColor: i < filled ? 'var(--nd-text-primary)' : 'var(--nd-border)' }}
                         />
                       ))}
                     </div>
@@ -212,6 +215,20 @@ function AlertsView() {
 export default function App() {
   useTopology();
   const { currentView } = useTopologyStore();
+  const { theme } = useSettingsStore();
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    const isDark =
+      theme === 'dark' ||
+      (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      
+    if (isDark) {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+  }, [theme]);
 
   const viewMap: Record<string, React.ReactNode> = {
     topology: <TopologyView />,

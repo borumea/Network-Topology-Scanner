@@ -4,7 +4,8 @@ import cola from 'cytoscape-cola';
 import dagre from 'cytoscape-dagre';
 import { useTopologyStore } from '../../stores/topologyStore';
 import { useFilterStore } from '../../stores/filterStore';
-import { cytoscapeStylesheet, getLayoutOptions } from '../../lib/cytoscape-config';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { getCytoscapeStylesheet, getLayoutOptions } from '../../lib/cytoscape-config';
 import { truncate } from '../../lib/graph-utils';
 import GraphControls from './GraphControls';
 import LayerToggle from './LayerToggle';
@@ -26,13 +27,16 @@ export default function NetworkCanvas() {
   } = useTopologyStore();
 
   const { activeLayout, showLabels, showRiskHalos, deviceTypeFilter, statusFilter } = useFilterStore();
+  const { theme } = useSettingsStore();
+
+  const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
   useEffect(() => {
     if (!containerRef.current) return;
 
     const cy = cytoscape({
       container: containerRef.current,
-      style: cytoscapeStylesheet,
+      style: getCytoscapeStylesheet(isDark),
       layout: { name: 'preset' },
       minZoom: 0.1,
       maxZoom: 4,
@@ -81,7 +85,13 @@ export default function NetworkCanvas() {
     cyRef.current = cy;
     setCyReady((c) => c + 1);
     return () => { cy.destroy(); cyRef.current = null; };
-  }, [selectDevice, setRightPanelContent]);
+  }, [selectDevice, setRightPanelContent]); // Init once
+
+  useEffect(() => {
+    if (cyRef.current) {
+      cyRef.current.style(getCytoscapeStylesheet(isDark));
+    }
+  }, [isDark]);
 
   useEffect(() => {
     const cy = cyRef.current;
@@ -91,13 +101,13 @@ export default function NetworkCanvas() {
       cy.elements().remove();
 
       let filteredDevices = devices;
-      if (deviceTypeFilter.length > 0) filteredDevices = filteredDevices.filter((d) => deviceTypeFilter.includes(d.device_type));
-      if (statusFilter.length > 0) filteredDevices = filteredDevices.filter((d) => statusFilter.includes(d.status));
+      if (deviceTypeFilter.length > 0) filteredDevices = filteredDevices.filter((d: any) => deviceTypeFilter.includes(d.device_type));
+      if (statusFilter.length > 0) filteredDevices = filteredDevices.filter((d: any) => statusFilter.includes(d.status));
 
-      const deviceIds = new Set(filteredDevices.map((d) => d.id));
-      const spofIds = new Set(spofs.map((s) => s.device_id));
+      const deviceIds = new Set(filteredDevices.map((d: any) => d.id));
+      const spofIds = new Set(spofs.map((s: any) => s.device_id));
 
-      filteredDevices.forEach((device) => {
+      filteredDevices.forEach((device: any) => {
         cy.add({
           group: 'nodes',
           data: {
@@ -111,7 +121,7 @@ export default function NetworkCanvas() {
         });
       });
 
-      connections.forEach((conn) => {
+      connections.forEach((conn: any) => {
         if (deviceIds.has(conn.source_id) && deviceIds.has(conn.target_id)) {
           cy.add({
             group: 'edges',
@@ -125,7 +135,7 @@ export default function NetworkCanvas() {
         }
       });
 
-      dependencies.forEach((dep) => {
+      dependencies.forEach((dep: any) => {
         if (deviceIds.has(dep.source_id) && deviceIds.has(dep.target_id)) {
           cy.add({
             group: 'edges',
@@ -155,10 +165,10 @@ export default function NetworkCanvas() {
     cy.nodes().removeClass('sim-removed sim-disconnected sim-degraded sim-safe');
     if (simulationActive && simulationResult) {
       const { removed_node_ids, disconnected_devices, degraded_devices, safe_device_ids } = simulationResult;
-      removed_node_ids.forEach((id) => cy.getElementById(id).addClass('sim-removed'));
-      disconnected_devices.forEach((d) => cy.getElementById(d.id).addClass('sim-disconnected'));
-      degraded_devices.forEach((d) => cy.getElementById(d.id).addClass('sim-degraded'));
-      safe_device_ids.forEach((id) => cy.getElementById(id).addClass('sim-safe'));
+      removed_node_ids.forEach((id: string) => cy.getElementById(id).addClass('sim-removed'));
+      disconnected_devices.forEach((d: any) => cy.getElementById(d.id).addClass('sim-disconnected'));
+      degraded_devices.forEach((d: any) => cy.getElementById(d.id).addClass('sim-degraded'));
+      safe_device_ids.forEach((id: string) => cy.getElementById(id).addClass('sim-safe'));
     }
   }, [simulationActive, simulationResult]);
 

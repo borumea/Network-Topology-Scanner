@@ -14,10 +14,36 @@ html, body, #root {
   overflow: hidden;
 }
 
+:root {
+  --nd-black: #F5F5F5;
+  --nd-surface: #FFFFFF;
+  --nd-surface-raised: #F0F0F0;
+  --nd-border: #E8E8E8;
+  --nd-border-visible: #CCCCCC;
+  --nd-text-disabled: #999999;
+  --nd-text-secondary: #666666;
+  --nd-text-primary: #1A1A1A;
+  --nd-text-display: #000000;
+  --nd-icon-color: #1A1A1A;
+}
+
+.dark {
+  --nd-black: #0A0A0A;
+  --nd-surface: #1A1A1A;
+  --nd-surface-raised: #252525;
+  --nd-border: #333333;
+  --nd-border-visible: #404040;
+  --nd-text-disabled: #666666;
+  --nd-text-secondary: #A3A3A3;
+  --nd-text-primary: #FAFAFA;
+  --nd-text-display: #FFFFFF;
+  --nd-icon-color: #FFFFFF;
+}
+
 body {
   font-family: 'Space Grotesk', 'DM Sans', system-ui, sans-serif;
-  background-color: #F5F5F5;
-  color: #1A1A1A;
+  background-color: var(--nd-black);
+  color: var(--nd-text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -58,17 +84,17 @@ body {
   line-height: 1.2;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #666666;
+  color: var(--nd-text-secondary);
 }
 
 /* Dot-grid background */
 .dot-grid {
-  background-image: radial-gradient(circle, #CCCCCC 1px, transparent 1px);
+  background-image: radial-gradient(circle, var(--nd-border-visible) 1px, transparent 1px);
   background-size: 16px 16px;
 }
 
 .dot-grid-subtle {
-  background-image: radial-gradient(circle, #E8E8E8 0.5px, transparent 0.5px);
+  background-image: radial-gradient(circle, var(--nd-border) 0.5px, transparent 0.5px);
   background-size: 12px 12px;
 }
 
