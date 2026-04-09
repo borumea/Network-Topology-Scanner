@@ -43,7 +43,7 @@ export default function Sidebar() {
     <aside className="h-full w-[200px] flex-shrink-0 border-r border-nd-border bg-nd-surface flex flex-col">
       {/* Logo */}
       <div className="h-12 flex items-center px-4 border-b border-nd-border gap-2.5">
-        <span className="font-display text-heading font-bold text-black tracking-tight">NTS</span>
+        <span className="font-display text-heading font-bold text-nd-text-display tracking-tight">NTS</span>
       </div>
 
       {/* Nav */}

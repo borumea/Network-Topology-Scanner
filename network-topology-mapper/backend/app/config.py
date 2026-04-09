@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     scan_default_range: str = "192.168.0.0/16"
     scan_rate_limit: int = 1000
     scan_passive_interface: str = "eth0"
+    enable_active_scan: bool = True
+    enable_passive_scan: bool = True
+    enable_snmp_scan: bool = True
     snmp_community: str = "public"
     snmp_version: str = "2c"
 
