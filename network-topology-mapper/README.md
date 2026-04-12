@@ -10,7 +10,7 @@ A real-time network topology mapping and analysis platform that discovers device
 - **SPOF Detection**: Automatically identify single points of failure using graph analysis
 - **Real-time Monitoring**: WebSocket-based live updates for topology changes, alerts, and scan progress
 - **Risk Scoring**: Composite risk assessment for devices and overall network health
-- **AI-Powered Reports**: Natural language resilience reports powered by Claude
+- **AI-Powered Reports**: Natural language resilience reports generated via Claude Code headless (the `claude` CLI)
 - **Anomaly Detection**: Machine learning-based detection of unusual topology changes
 - **Multi-Layer Views**: Physical, logical, and application layer visualization
 
@@ -154,9 +154,6 @@ Key environment variables (see `.env.example` for full list):
 # Redis (optional — pub/sub and cache unavailable without it)
 REDIS_URL=redis://localhost:6379/0
 
-# AI Reports (optional — resilience reports require this)
-ANTHROPIC_API_KEY=your-api-key-here
-
 # Scanning
 SCAN_DEFAULT_RANGE=192.168.1.0/24
 SNMP_COMMUNITY=public
@@ -164,6 +161,8 @@ SNMP_COMMUNITY=public
 # Agent Mode
 AGENT_MODE=alert  # alert | interactive | autonomous
 ```
+
+> **AI resilience reports:** The `/api/reports/resilience` endpoint uses Claude Code headless — it shells out to the `claude` CLI if it is on PATH. No API key or env var is required. If `claude` is not installed, the endpoint returns a deterministic rule-based fallback report.
 
 ## Security Considerations
 
