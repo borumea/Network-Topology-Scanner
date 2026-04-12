@@ -729,7 +729,7 @@ GET /api/reports/changelog
 Real-time event subscription via WebSocket.
 
 ```
-WS /ws
+WS /ws/topology
 ```
 
 **Client → Server (Subscribe)**:
@@ -737,9 +737,17 @@ WS /ws
 ```json
 {
   "type": "subscribe",
-  "channels": ["topology:events", "alerts:new", "scans:progress"]
+  "channel": "topology"
 }
 ```
+
+**Client → Server (Ping)**:
+
+```json
+{ "type": "ping" }
+```
+
+The server replies with `{"type": "pong"}`. The frontend pings every 30 seconds to keep the connection alive.
 
 **Server → Client (Events)**:
 
