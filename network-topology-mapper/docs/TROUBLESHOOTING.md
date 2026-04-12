@@ -319,7 +319,7 @@ SNMP_RETRIES=5   # Increase from 3
 **Diagnosis**:
 ```javascript
 // Check browser console
-// Should see: "WebSocket connecting to ws://localhost:8000/ws"
+// Should see: "WebSocket connecting to ws://localhost:8000/ws/topology"
 ```
 
 **Solutions**:
@@ -329,14 +329,7 @@ SNMP_RETRIES=5   # Increase from 3
 curl http://localhost:8000/api/topology/stats
 ```
 
-2. **Check WebSocket URL** in frontend .env:
-```bash
-# frontend/.env.local
-VITE_WS_URL=ws://localhost:8000/ws
-
-# For HTTPS, use wss://
-VITE_WS_URL=wss://yourdomain.com/ws
-```
+2. **WebSocket URL** is derived from `window.location` in `useWebSocket.ts` — it connects to `/ws/topology` on the same host/port that served the frontend. In dev mode, Vite proxies `/ws/topology` to the backend (see `vite.config.ts`).
 
 3. **Check proxy configuration** (vite.config.ts):
 ```typescript
