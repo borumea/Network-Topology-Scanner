@@ -16,37 +16,44 @@ The backend handles:
 
 ```
 app/
-├── main.py                 # FastAPI application entry point
-├── config.py              # Configuration management
-├── models/                # Data models (Pydantic + SQLAlchemy)
+├── main.py                 # FastAPI application entry point + asyncio lifespan
+├── config.py              # Pydantic settings (reads .env)
+├── models/                # Pydantic request/response models
 │   ├── device.py
 │   ├── connection.py
 │   ├── alert.py
 │   └── scan.py
-├── routers/               # API route handlers
+├── routers/               # API route handlers (device routes live in topology.py)
 │   ├── topology.py
-│   ├── devices.py
 │   ├── scans.py
 │   ├── simulation.py
 │   ├── alerts.py
-│   └── reports.py
+│   ├── reports.py
+│   ├── snapshots.py
+│   └── settings.py
 ├── services/              # Business logic layer
 │   ├── scanner/           # Network scanning services
 │   │   ├── active_scanner.py
 │   │   ├── passive_scanner.py
 │   │   ├── snmp_poller.py
+│   │   ├── config_puller.py
+│   │   ├── connection_inference.py
 │   │   └── scan_coordinator.py
 │   ├── graph/             # Graph analysis services
 │   │   ├── graph_builder.py
 │   │   ├── failure_simulator.py
 │   │   ├── spof_detector.py
-│   │   └── resilience_scorer.py
+│   │   ├── resilience_scorer.py
+│   │   └── path_analyzer.py
 │   ├── ai/                # AI/ML services
 │   │   ├── anomaly_detector.py
-│   │   └── report_generator.py
-│   └── realtime/          # WebSocket & events
-│       ├── event_bus.py
-│       └── ws_manager.py
+│   │   ├── failure_predictor.py
+│   │   ├── report_generator.py   # Wraps the `claude` CLI via subprocess
+│   │   └── scan_optimizer.py
+│   ├── realtime/          # WebSocket & events
+│   │   ├── event_bus.py
+│   │   └── ws_manager.py
+│   └── mock_data.py       # Dev fallback data
 ├── tasks/                 # Asyncio background tasks
 │   ├── scan_tasks.py
 │   └── analysis_tasks.py
@@ -129,27 +136,19 @@ flake8 app/
 mypy app/
 ```
 
-### Database Migrations
+### Database
 
-```bash
-# Create migration
-alembic revision --autogenerate -m "description"
-
-# Apply migrations
-alembic upgrade head
-
-# Rollback
-alembic downgrade -1
-```
+SQLite schemas are created on first run by `sqlite_db.connect()` and `topology_db.connect()`. There are no Alembic migrations — the schema is applied idempotently on every startup.
 
 ## Key Services
 
 ### Scanner Services
 
 **Active Scanner** (`services/scanner/active_scanner.py`):
-- Uses python-nmap wrapper
+- Shells out to `nmap` via `subprocess` (NOT python-nmap)
 - Discovers devices via network probing
 - Identifies open ports and services
+- Supports `light` / `normal` / `deep` intensity profiles
 
 **Passive Scanner** (`services/scanner/passive_scanner.py`):
 - Scapy-based packet capture
@@ -196,9 +195,10 @@ alembic downgrade -1
 - Generates alerts
 
 **Report Generator** (`services/ai/report_generator.py`):
-- Claude API integration
-- Natural language resilience reports
-- Executive summaries
+- Wraps the `claude` CLI (Claude Code headless) via `subprocess`
+- Produces natural language resilience reports with executive summaries
+- Falls back to a deterministic rule-based report when `claude` is not on PATH
+- No Anthropic SDK dependency; no API key required
 
 ### Real-time Services
 
@@ -252,8 +252,29 @@ GET    /api/alerts/stream         - SSE alert stream
 ### Reports
 
 ```
-GET    /api/reports/resilience    - AI resilience report
-GET    /api/reports/changelog     - Topology changes
+GET    /api/reports/resilience    - Claude-Code-generated resilience report
+GET    /api/reports/changelog     - Topology changes from snapshot history
+```
+
+### Snapshots
+
+```
+GET    /api/snapshots             - List topology snapshots
+GET    /api/snapshots/{id}        - Specific snapshot
+```
+
+### Settings
+
+```
+GET    /api/settings              - Current effective settings
+PUT    /api/settings              - Persist setting overrides to SQLite
+GET    /api/scan-optimizer/recommendations - AI scan recommendations
+```
+
+### Health
+
+```
+GET    /api/health                - Liveness + component status
 ```
 
 ### WebSocket
@@ -275,21 +296,18 @@ WS     /ws/topology               - Real-time events
 
 ## Background Tasks
 
-### Scheduled Tasks (asyncio)
+### Scheduled Tasks (asyncio, NOT Celery)
 
-Scheduled via asyncio tasks in the FastAPI lifespan function (`main.py`).
+Scheduled via `asyncio.create_task()` in the FastAPI lifespan function (`main.py`). There is no Celery worker, broker config, or `celery_app.py` — this was a deliberate architectural decision.
 
-### Task Schedule
+### Current Schedule
 
-- **Full scan**: Every 6 hours
-- **SNMP poll**: Every 30 minutes
-- **Topology snapshot**: Daily at midnight
-- **SPOF detection**: After topology changes
-- **Risk score calculation**: Hourly
+- **Full scan**: Every `scan_interval_minutes` (default: 5; `0` disables)
+- **Anomaly detection**: Runs after each scan completion (skipped silently until there are enough devices for IsolationForest to train)
 
 ## Configuration
 
-Key environment variables:
+Key environment variables (see `../.env.example`):
 
 ```bash
 # Databases
@@ -301,15 +319,16 @@ SCAN_DEFAULT_RANGE=192.168.0.0/16
 SCAN_RATE_LIMIT=1000
 SNMP_COMMUNITY=public
 
-# AI
-ANTHROPIC_API_KEY=sk-ant-...
-CLAUDE_MODEL=claude-sonnet-4-5-20250929
-
 # Server
 APP_HOST=0.0.0.0
 APP_PORT=8000
 LOG_LEVEL=INFO
+
+# Scheduled scanning
+SCAN_INTERVAL_MINUTES=5   # 0 = disabled
 ```
+
+**Note on AI reports:** There is no `ANTHROPIC_API_KEY` or `CLAUDE_MODEL` setting. `report_generator.py` shells out to the `claude` CLI directly. Install the Claude Code CLI and ensure it is on PATH; otherwise the endpoint returns a deterministic rule-based report.
 
 ## Logging
 
@@ -370,12 +389,7 @@ All endpoints return consistent error responses:
 
 ### Monitoring
 
-Prometheus metrics exposed at `/metrics`:
-
-- Request count/duration
-- Active scan count
-- WebSocket connection count
-- Database query duration
+There is no Prometheus `/metrics` endpoint yet. Runtime health is exposed via `GET /api/health`, which reports topology_db status, Redis availability, WebSocket client count, snapshot count, and the current scheduled scan interval.
 
 ## Troubleshooting
 
