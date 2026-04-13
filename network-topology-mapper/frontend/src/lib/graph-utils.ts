@@ -13,22 +13,6 @@ export const DEVICE_TYPE_COLORS: Record<DeviceType, string> = {
   unknown: '#CCCCCC',
 };
 
-export const DEVICE_TYPE_COLORS_DARK: Record<DeviceType, string> = {
-  router: '#FAFAFA',
-  switch: '#E0E0E0',
-  server: '#C0C0C0',
-  firewall: '#FAFAFA',
-  ap: '#A3A3A3',
-  workstation: '#808080',
-  iot: '#666666',
-  printer: '#808080',
-  unknown: '#404040',
-};
-
-export const getDeviceTypeColor = (type: DeviceType, isDark: boolean = false) => {
-  return isDark ? DEVICE_TYPE_COLORS_DARK[type] : DEVICE_TYPE_COLORS[type];
-};
-
 export const STATUS_COLORS: Record<DeviceStatus, string> = {
   online: '#4A9E5C',
   offline: '#D71921',

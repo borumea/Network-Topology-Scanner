@@ -44,7 +44,7 @@ function DashboardView() {
   return (
     <div className="h-full overflow-y-auto p-6">
       <div className="max-w-5xl mx-auto space-y-6">
-        <h1 className="font-display text-display-md font-bold text-black">Dashboard</h1>
+        <h1 className="font-display text-display-md font-bold text-nd-text-primary">Dashboard</h1>
 
         <MetricsBar />
 
@@ -111,7 +111,7 @@ function SettingsView() {
   return (
     <div className="h-full overflow-y-auto p-6">
       <div className="max-w-2xl mx-auto space-y-6">
-        <h1 className="font-display text-display-md font-bold text-black">Settings</h1>
+        <h1 className="font-display text-display-md font-bold text-nd-text-primary">Settings</h1>
 
         <div className="bg-nd-surface rounded-nd-card p-5 border border-nd-border space-y-4">
           <div className="font-mono text-label uppercase tracking-[0.08em] text-nd-text-secondary">Scan Configuration</div>
@@ -219,15 +219,29 @@ export default function App() {
 
   useEffect(() => {
     const root = window.document.documentElement;
-    const isDark =
-      theme === 'dark' ||
-      (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-      
-    if (isDark) {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+    const applyTheme = () => {
+      const isDark =
+        theme === 'dark' ||
+        (theme === 'system' && mediaQuery.matches);
+
+      if (isDark) {
+        root.classList.add('dark');
+      } else {
+        root.classList.remove('dark');
+      }
+    };
+
+    applyTheme();
+
+    // Listen for OS theme changes when in system mode
+    const handleChange = () => {
+      if (theme === 'system') applyTheme();
+    };
+    mediaQuery.addEventListener('change', handleChange);
+
+    return () => mediaQuery.removeEventListener('change', handleChange);
   }, [theme]);
 
   const viewMap: Record<string, React.ReactNode> = {

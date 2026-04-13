@@ -14,6 +14,22 @@ import MiniMap from './MiniMap';
 try { cytoscape.use(cola); } catch {}
 try { cytoscape.use(dagre); } catch {}
 
+function useIsDark() {
+  const { theme } = useSettingsStore();
+  const [systemDark, setSystemDark] = useState(() =>
+    window.matchMedia('(prefers-color-scheme: dark)').matches
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e: MediaQueryListEvent) => setSystemDark(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  return theme === 'dark' || (theme === 'system' && systemDark);
+}
+
 export default function NetworkCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
@@ -27,9 +43,7 @@ export default function NetworkCanvas() {
   } = useTopologyStore();
 
   const { activeLayout, showLabels, showRiskHalos, deviceTypeFilter, statusFilter } = useFilterStore();
-  const { theme } = useSettingsStore();
-
-  const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  const isDark = useIsDark();
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -101,13 +115,13 @@ export default function NetworkCanvas() {
       cy.elements().remove();
 
       let filteredDevices = devices;
-      if (deviceTypeFilter.length > 0) filteredDevices = filteredDevices.filter((d: any) => deviceTypeFilter.includes(d.device_type));
-      if (statusFilter.length > 0) filteredDevices = filteredDevices.filter((d: any) => statusFilter.includes(d.status));
+      if (deviceTypeFilter.length > 0) filteredDevices = filteredDevices.filter((d) => deviceTypeFilter.includes(d.device_type));
+      if (statusFilter.length > 0) filteredDevices = filteredDevices.filter((d) => statusFilter.includes(d.status));
 
-      const deviceIds = new Set(filteredDevices.map((d: any) => d.id));
-      const spofIds = new Set(spofs.map((s: any) => s.device_id));
+      const deviceIds = new Set(filteredDevices.map((d) => d.id));
+      const spofIds = new Set(spofs.map((s) => s.device_id));
 
-      filteredDevices.forEach((device: any) => {
+      filteredDevices.forEach((device) => {
         cy.add({
           group: 'nodes',
           data: {
@@ -121,7 +135,7 @@ export default function NetworkCanvas() {
         });
       });
 
-      connections.forEach((conn: any) => {
+      connections.forEach((conn) => {
         if (deviceIds.has(conn.source_id) && deviceIds.has(conn.target_id)) {
           cy.add({
             group: 'edges',
@@ -135,7 +149,7 @@ export default function NetworkCanvas() {
         }
       });
 
-      dependencies.forEach((dep: any) => {
+      dependencies.forEach((dep) => {
         if (deviceIds.has(dep.source_id) && deviceIds.has(dep.target_id)) {
           cy.add({
             group: 'edges',
@@ -165,10 +179,10 @@ export default function NetworkCanvas() {
     cy.nodes().removeClass('sim-removed sim-disconnected sim-degraded sim-safe');
     if (simulationActive && simulationResult) {
       const { removed_node_ids, disconnected_devices, degraded_devices, safe_device_ids } = simulationResult;
-      removed_node_ids.forEach((id: string) => cy.getElementById(id).addClass('sim-removed'));
-      disconnected_devices.forEach((d: any) => cy.getElementById(d.id).addClass('sim-disconnected'));
-      degraded_devices.forEach((d: any) => cy.getElementById(d.id).addClass('sim-degraded'));
-      safe_device_ids.forEach((id: string) => cy.getElementById(id).addClass('sim-safe'));
+      removed_node_ids.forEach((id) => cy.getElementById(id).addClass('sim-removed'));
+      disconnected_devices.forEach((d) => cy.getElementById(d.id).addClass('sim-disconnected'));
+      degraded_devices.forEach((d) => cy.getElementById(d.id).addClass('sim-degraded'));
+      safe_device_ids.forEach((id) => cy.getElementById(id).addClass('sim-safe'));
     }
   }, [simulationActive, simulationResult]);
 
