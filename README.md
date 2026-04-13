@@ -16,6 +16,20 @@ Network discovery and visualization tool. Scans your LAN with nmap + SNMP + pass
 
 ### Run
 
+**Linux/macOS:**
+```bash
+cd network-topology-mapper
+chmod +x start.sh
+./start.sh
+```
+
+**Windows:**
+```cmd
+cd network-topology-mapper
+start.bat
+```
+
+**Manual (any platform):**
 ```bash
 cd network-topology-mapper
 

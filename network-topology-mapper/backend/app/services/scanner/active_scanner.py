@@ -6,6 +6,8 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 from typing import Optional
 
+from app.utils.platform_utils import get_nmap_privilege_flags
+
 logger = logging.getLogger(__name__)
 
 
@@ -30,14 +32,25 @@ class ActiveScanner:
             logger.warning("Nmap unavailable, returning empty results")
             return []
 
-        # --unprivileged: skip raw sockets (avoids Windows assertion crash in python-nmap)
-        # -PS: TCP connect ping for host discovery (works without admin)
-        # --host-timeout 1500ms: skip hosts that don't respond quickly (dead IPs timeout fast)
-        args = {
-            "light": "--unprivileged -sn -PS21,22,80,139,443,445,3389,8080 --host-timeout 1500ms -T4",
-            "normal": "--unprivileged -sT -sV -PS21,22,80,139,443,445,3389,8080 --top-ports 100 --host-timeout 10s -T4 --max-retries 1",
-            "deep": "--unprivileged -sT -sV -sC -PS21,22,80,139,443,445,3389,8080 --top-ports 1000 --host-timeout 30s -T4",
-        }.get(intensity, "--unprivileged -sT -sV -PS21,22,80,443,445,3389 --top-ports 100 --host-timeout 10s -T4 --max-retries 1")
+        priv_flag = get_nmap_privilege_flags()
+
+        # Base flags differ based on privilege level.
+        # Unprivileged: TCP connect (-sT) only — works without raw sockets.
+        # Privileged:   SYN (-sS) + ICMP echo + OS detect — faster, stealthier.
+        if priv_flag:
+            args_map = {
+                "light": f"{priv_flag} -sn -PS21,22,80,139,443,445,3389,8080 --host-timeout 1500ms -T4",
+                "normal": f"{priv_flag} -sT -sV -PS21,22,80,139,443,445,3389,8080 --top-ports 100 --host-timeout 10s -T4 --max-retries 1",
+                "deep": f"{priv_flag} -sT -sV -sC -PS21,22,80,139,443,445,3389,8080 --top-ports 1000 --host-timeout 30s -T4",
+            }
+        else:
+            args_map = {
+                "light": "-sn -PE -PS21,22,80,443 --host-timeout 1500ms -T4",
+                "normal": "-sS -sV -PE -PS21,22,80,443 --top-ports 100 --host-timeout 10s -T4 --max-retries 1",
+                "deep": "-sS -sV -sC -O -PE -PS21,22,80,443 --top-ports 1000 --host-timeout 30s -T4",
+            }
+
+        args = args_map.get(intensity, args_map["normal"])
 
         cmd = [self._nmap_path, "-oX", "-"] + args.split() + [target]
         logger.info("Running nmap command: %s", " ".join(cmd))

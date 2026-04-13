@@ -6,12 +6,58 @@
 
 ## Prerequisites
 
+### All Platforms
 - Python 3.11+
 - Node.js 18+
 - nmap (for active scanning)
 
 Optional:
 - Redis 7 (for WebSocket pub/sub — app falls back to in-memory if unavailable)
+
+### Linux Additional Requirements
+
+**Ubuntu/Debian:**
+```bash
+# Core dependencies
+sudo apt update
+sudo apt install -y python3.11 python3.11-venv python3-pip nmap
+
+# For Scapy packet capture
+sudo apt install -y libpcap-dev python3-dev build-essential
+
+# Optional: Redis
+sudo apt install -y redis-server
+sudo systemctl enable --now redis-server
+```
+
+**Fedora/RHEL:**
+```bash
+sudo dnf install -y python3.11 nmap libpcap-devel gcc python3-devel redis
+```
+
+**Arch Linux:**
+```bash
+sudo pacman -S python nmap libpcap redis
+```
+
+### Network Scanning Privileges (Linux)
+
+Network scanning requires elevated privileges. Choose one option:
+
+**Option A: Linux Capabilities (Recommended)**
+```bash
+# Grant capabilities to nmap and python
+sudo setcap cap_net_raw,cap_net_admin=eip $(which nmap)
+sudo setcap cap_net_raw,cap_net_admin=eip $(which python3.11)
+```
+
+**Option B: Run as Root (Not Recommended)**
+```bash
+sudo uvicorn app.main:app --reload --port 8000
+```
+
+**Option C: Use Unprivileged Mode**
+No setup required — NTS auto-detects and falls back to TCP connect scans. Slower but works without elevated privileges.
 
 ### Install Redis (Optional)
 

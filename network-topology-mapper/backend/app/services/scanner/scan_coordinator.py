@@ -237,7 +237,7 @@ class ScanCoordinator:
             return
 
         settings = get_settings()
-        interface = settings.scan_passive_interface
+        interface = settings.get_passive_interface()
 
         collected = []
 

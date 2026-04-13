@@ -29,7 +29,14 @@ class PassiveScanner:
     def is_running(self) -> bool:
         return self._running
 
-    def start(self, interface: str = "eth0", callback: Callable = None):
+    def start(self, interface: Optional[str] = None, callback: Callable = None):
+        """
+        Start passive scanning.
+
+        Args:
+            interface: Network interface to sniff on. If None, uses config default.
+            callback: Function called for each discovered device.
+        """
         if not self._scapy:
             logger.warning("Scapy unavailable, cannot start passive scanner")
             return
@@ -37,6 +44,11 @@ class PassiveScanner:
         if self._running:
             logger.warning("Passive scanner already running")
             return
+
+        # Auto-detect interface if not provided
+        if interface is None:
+            from app.config import get_settings
+            interface = get_settings().get_passive_interface()
 
         self._callback = callback
         self._running = True
