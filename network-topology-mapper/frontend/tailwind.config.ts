@@ -1,6 +1,7 @@
 import type { Config } from 'tailwindcss'
 
 const config: Config = {
+  darkMode: 'class',
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
@@ -22,19 +23,15 @@ const config: Config = {
       },
       colors: {
         nd: {
-          // Light mode surfaces
-          black: '#F5F5F5',
-          surface: '#FFFFFF',
-          'surface-raised': '#F0F0F0',
-          // Borders
-          border: '#E8E8E8',
-          'border-visible': '#CCCCCC',
-          // Text hierarchy
-          'text-disabled': '#999999',
-          'text-secondary': '#666666',
-          'text-primary': '#1A1A1A',
-          'text-display': '#000000',
-          // Accent & status
+          black: 'var(--nd-black)',
+          surface: 'var(--nd-surface)',
+          'surface-raised': 'var(--nd-surface-raised)',
+          border: 'var(--nd-border)',
+          'border-visible': 'var(--nd-border-visible)',
+          'text-disabled': 'var(--nd-text-disabled)',
+          'text-secondary': 'var(--nd-text-secondary)',
+          'text-primary': 'var(--nd-text-primary)',
+          'text-display': 'var(--nd-text-display)',
           accent: '#D71921',
           'accent-subtle': 'rgba(215,25,33,0.15)',
           success: '#4A9E5C',

@@ -1,7 +1,6 @@
 import type { DeviceType, ConnectionType, DeviceStatus } from '../types/topology';
 
-// Nothing light-mode: monochrome nodes. Device types differentiated by shape/icon,
-// not fill color. These are used only for the minimap dots and legend.
+// These are used only for the minimap dots and legend.
 export const DEVICE_TYPE_COLORS: Record<DeviceType, string> = {
   router: '#1A1A1A',
   switch: '#333333',

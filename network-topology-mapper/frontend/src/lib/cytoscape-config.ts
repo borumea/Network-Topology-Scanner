@@ -15,7 +15,7 @@ const NODE_SIZES: Record<string, number> = {
 
 // Nothing light-mode: monochrome graph with status-colored borders only.
 // White nodes, dark icons, thin borders. Clean technical diagram.
-export const cytoscapeStylesheet: any[] = [
+export const getCytoscapeStylesheet = (isDark: boolean = false): any[] => [
   // ─── Base node: white circle, dark border, icon inside ───
   {
     selector: 'node',
@@ -23,9 +23,9 @@ export const cytoscapeStylesheet: any[] = [
       shape: 'ellipse',
       width: 36,
       height: 36,
-      'background-color': '#FFFFFF',
+      'background-color': isDark ? '#1A1A1A' : '#FFFFFF',
       'border-width': 1.5,
-      'border-color': '#CCCCCC',
+      'border-color': isDark ? '#404040' : '#CCCCCC',
       label: 'data(label)',
       'text-valign': 'bottom',
       'text-halign': 'center',
@@ -33,11 +33,11 @@ export const cytoscapeStylesheet: any[] = [
       'font-size': 10,
       'font-family': "'Space Mono', monospace",
       'text-transform': 'uppercase',
-      color: '#666666',
+      color: isDark ? '#A3A3A3' : '#666666',
       'text-max-width': '90px',
       'text-wrap': 'ellipsis',
       'text-overflow-wrap': 'anywhere',
-      'background-image': getDeviceIcon('unknown' as any),
+      'background-image': getDeviceIcon('unknown' as any, isDark),
       'background-width': 18,
       'background-height': 18,
       'background-position-x': '50%',
@@ -57,7 +57,7 @@ export const cytoscapeStylesheet: any[] = [
     style: {
       width: NODE_SIZES[type] || 36,
       height: NODE_SIZES[type] || 36,
-      'background-image': getDeviceIcon(type as any),
+      'background-image': getDeviceIcon(type as any, isDark),
       'background-width': Math.round((NODE_SIZES[type] || 36) * 0.45),
       'background-height': Math.round((NODE_SIZES[type] || 36) * 0.45),
     } as any,
@@ -97,7 +97,7 @@ export const cytoscapeStylesheet: any[] = [
       height: 56,
       'border-width': 2.5,
       'font-weight': 'bold',
-      color: '#1A1A1A',
+      color: isDark ? '#FAFAFA' : '#1A1A1A',
     },
   },
 
@@ -131,13 +131,13 @@ export const cytoscapeStylesheet: any[] = [
     selector: ':selected',
     style: {
       'border-width': 3,
-      'border-color': '#000000',
+      'border-color': isDark ? '#FFFFFF' : '#000000',
       'overlay-opacity': 0,
       width: (ele: any) => (NODE_SIZES[ele.data('device_type')] || 36) + 8,
       height: (ele: any) => (NODE_SIZES[ele.data('device_type')] || 36) + 8,
       'z-index': 100,
       'font-weight': 'bold',
-      color: '#1A1A1A',
+      color: isDark ? '#FAFAFA' : '#1A1A1A',
     },
   },
 
@@ -146,7 +146,7 @@ export const cytoscapeStylesheet: any[] = [
     selector: 'edge',
     style: {
       width: 1,
-      'line-color': '#CCCCCC',
+      'line-color': isDark ? '#404040' : '#CCCCCC',
       'curve-style': 'bezier',
       'target-arrow-shape': 'none',
       opacity: 0.6,
@@ -183,8 +183,8 @@ export const cytoscapeStylesheet: any[] = [
     style: {
       'line-style': 'dotted',
       'target-arrow-shape': 'triangle',
-      'target-arrow-color': '#999999',
-      'line-color': '#999999',
+      'target-arrow-color': isDark ? '#666666' : '#999999',
+      'line-color': isDark ? '#666666' : '#999999',
       opacity: 0.3,
       width: 1,
       'curve-style': 'unbundled-bezier',
@@ -215,7 +215,7 @@ export const cytoscapeStylesheet: any[] = [
     style: {
       width: 2.5,
       opacity: 1,
-      'line-color': '#1A1A1A',
+      'line-color': isDark ? '#FFFFFF' : '#1A1A1A',
       'z-index': 50,
     },
   },
@@ -224,7 +224,7 @@ export const cytoscapeStylesheet: any[] = [
   {
     selector: '.sim-removed',
     style: {
-      'background-color': '#F0F0F0',
+      'background-color': isDark ? '#252525' : '#F0F0F0',
       opacity: 0.3,
       'border-style': 'dashed',
       'border-color': '#D71921',
@@ -263,7 +263,7 @@ export const cytoscapeStylesheet: any[] = [
       'font-size': 14,
       'font-family': "Space Grotesk, system-ui, sans-serif",
       'font-weight': 'bold',
-      color: '#000000',
+      color: isDark ? '#FFFFFF' : '#000000',
       'text-max-width': '200px',
       'text-wrap': 'none',
       'z-index': 90,
@@ -274,7 +274,7 @@ export const cytoscapeStylesheet: any[] = [
   {
     selector: 'node.highlighted',
     style: {
-      'border-color': '#000000',
+      'border-color': isDark ? '#FFFFFF' : '#000000',
       'border-width': 2.5,
       'z-index': 50,
     },
@@ -291,7 +291,7 @@ export const cytoscapeStylesheet: any[] = [
     selector: 'edge.highlighted',
     style: {
       opacity: 1,
-      'line-color': '#1A1A1A',
+      'line-color': isDark ? '#FAFAFA' : '#1A1A1A',
       width: 2,
       'z-index': 50,
     },
@@ -300,7 +300,7 @@ export const cytoscapeStylesheet: any[] = [
     selector: 'edge.edge-hovered',
     style: {
       opacity: 1,
-      'line-color': '#000000',
+      'line-color': isDark ? '#FFFFFF' : '#000000',
       width: 2.5,
       'z-index': 60,
     },

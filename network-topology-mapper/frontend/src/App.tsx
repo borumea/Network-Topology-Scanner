@@ -12,6 +12,8 @@ import RiskHeatmap from './components/dashboard/RiskHeatmap';
 import TimelineView from './components/dashboard/TimelineView';
 import DependencyMatrix from './components/dashboard/DependencyMatrix';
 import { useFilterStore } from './stores/filterStore';
+import { useSettingsStore } from './stores/settingsStore';
+import { useEffect } from 'react';
 
 function TopologyView() {
   const { rightPanelContent, selectedDeviceId } = useTopologyStore();
@@ -36,12 +38,13 @@ function DashboardView() {
 
   if (!stats) return <div className="p-6 font-mono text-caption text-nd-text-disabled">[LOADING...]</div>;
 
-  const typeEntries = Object.entries(stats.type_counts).sort((a, b) => b[1] - a[1]);
+  const typeEntries = Object.entries(stats.type_counts) as [string, number][];
+  typeEntries.sort((a, b) => b[1] - a[1]);
 
   return (
     <div className="h-full overflow-y-auto p-6">
       <div className="max-w-5xl mx-auto space-y-6">
-        <h1 className="font-display text-display-md font-bold text-black">Dashboard</h1>
+        <h1 className="font-display text-display-md font-bold text-nd-text-primary">Dashboard</h1>
 
         <MetricsBar />
 
@@ -61,7 +64,7 @@ function DashboardView() {
                         <div
                           key={i}
                           className="flex-1 h-full"
-                          style={{ backgroundColor: i < filled ? '#1A1A1A' : '#E8E8E8' }}
+                          style={{ backgroundColor: i < filled ? 'var(--nd-text-primary)' : 'var(--nd-border)' }}
                         />
                       ))}
                     </div>
@@ -108,7 +111,7 @@ function SettingsView() {
   return (
     <div className="h-full overflow-y-auto p-6">
       <div className="max-w-2xl mx-auto space-y-6">
-        <h1 className="font-display text-display-md font-bold text-black">Settings</h1>
+        <h1 className="font-display text-display-md font-bold text-nd-text-primary">Settings</h1>
 
         <div className="bg-nd-surface rounded-nd-card p-5 border border-nd-border space-y-4">
           <div className="font-mono text-label uppercase tracking-[0.08em] text-nd-text-secondary">Scan Configuration</div>
@@ -212,6 +215,34 @@ function AlertsView() {
 export default function App() {
   useTopology();
   const { currentView } = useTopologyStore();
+  const { theme } = useSettingsStore();
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+    const applyTheme = () => {
+      const isDark =
+        theme === 'dark' ||
+        (theme === 'system' && mediaQuery.matches);
+
+      if (isDark) {
+        root.classList.add('dark');
+      } else {
+        root.classList.remove('dark');
+      }
+    };
+
+    applyTheme();
+
+    // Listen for OS theme changes when in system mode
+    const handleChange = () => {
+      if (theme === 'system') applyTheme();
+    };
+    mediaQuery.addEventListener('change', handleChange);
+
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, [theme]);
 
   const viewMap: Record<string, React.ReactNode> = {
     topology: <TopologyView />,

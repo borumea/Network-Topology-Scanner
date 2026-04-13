@@ -4,7 +4,8 @@ import cola from 'cytoscape-cola';
 import dagre from 'cytoscape-dagre';
 import { useTopologyStore } from '../../stores/topologyStore';
 import { useFilterStore } from '../../stores/filterStore';
-import { cytoscapeStylesheet, getLayoutOptions } from '../../lib/cytoscape-config';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { getCytoscapeStylesheet, getLayoutOptions } from '../../lib/cytoscape-config';
 import { truncate } from '../../lib/graph-utils';
 import GraphControls from './GraphControls';
 import LayerToggle from './LayerToggle';
@@ -12,6 +13,22 @@ import MiniMap from './MiniMap';
 
 try { cytoscape.use(cola); } catch {}
 try { cytoscape.use(dagre); } catch {}
+
+function useIsDark() {
+  const { theme } = useSettingsStore();
+  const [systemDark, setSystemDark] = useState(() =>
+    window.matchMedia('(prefers-color-scheme: dark)').matches
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e: MediaQueryListEvent) => setSystemDark(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  return theme === 'dark' || (theme === 'system' && systemDark);
+}
 
 export default function NetworkCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -26,13 +43,14 @@ export default function NetworkCanvas() {
   } = useTopologyStore();
 
   const { activeLayout, showLabels, showRiskHalos, deviceTypeFilter, statusFilter } = useFilterStore();
+  const isDark = useIsDark();
 
   useEffect(() => {
     if (!containerRef.current) return;
 
     const cy = cytoscape({
       container: containerRef.current,
-      style: cytoscapeStylesheet,
+      style: getCytoscapeStylesheet(isDark),
       layout: { name: 'preset' },
       minZoom: 0.1,
       maxZoom: 4,
@@ -81,7 +99,13 @@ export default function NetworkCanvas() {
     cyRef.current = cy;
     setCyReady((c) => c + 1);
     return () => { cy.destroy(); cyRef.current = null; };
-  }, [selectDevice, setRightPanelContent]);
+  }, [selectDevice, setRightPanelContent]); // Init once
+
+  useEffect(() => {
+    if (cyRef.current) {
+      cyRef.current.style(getCytoscapeStylesheet(isDark));
+    }
+  }, [isDark]);
 
   useEffect(() => {
     const cy = cyRef.current;
