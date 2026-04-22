@@ -319,7 +319,7 @@ SNMP_RETRIES=5   # Increase from 3
 **Diagnosis**:
 ```javascript
 // Check browser console
-// Should see: "WebSocket connecting to ws://localhost:8000/ws"
+// Should see: "WebSocket connecting to ws://localhost:8000/ws/topology"
 ```
 
 **Solutions**:
@@ -332,10 +332,10 @@ curl http://localhost:8000/api/topology/stats
 2. **Check WebSocket URL** in frontend .env:
 ```bash
 # frontend/.env.local
-VITE_WS_URL=ws://localhost:8000/ws
+VITE_WS_URL=ws://localhost:8000/ws/topology
 
 # For HTTPS, use wss://
-VITE_WS_URL=wss://yourdomain.com/ws
+VITE_WS_URL=wss://yourdomain.com/ws/topology
 ```
 
 3. **Check proxy configuration** (vite.config.ts):
@@ -483,9 +483,8 @@ curl http://localhost:8000/api/scans?status=running
 
 1. **Reduce scan frequency**:
 ```bash
-# .env - Increase intervals
-SCHEDULE_FULL_SCAN=0 */12 * * *    # Every 12 hours instead of 6
-SCHEDULE_SNMP_POLL=0 * * * *       # Every hour instead of 30 min
+# .env - Increase interval (minutes, 0 = disabled)
+SCAN_INTERVAL_MINUTES=30   # Every 30 minutes instead of 5
 ```
 
 2. **Limit scan rate**:

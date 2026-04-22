@@ -729,7 +729,7 @@ GET /api/reports/changelog
 Real-time event subscription via WebSocket.
 
 ```
-WS /ws
+WS /ws/topology
 ```
 
 **Client → Server (Subscribe)**:
