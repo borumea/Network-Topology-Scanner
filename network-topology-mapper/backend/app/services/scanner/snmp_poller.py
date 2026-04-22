@@ -11,11 +11,23 @@ class SNMPPoller:
 
     def __init__(self):
         self._available = False
+        self._import_error: Optional[str] = None
         try:
             from pysnmp.hlapi import getCmd, SnmpEngine
             self._available = True
-        except ImportError:
-            logger.warning("pysnmp not installed. SNMP polling unavailable.")
+        except ImportError as e:
+            # Loud error — pysnmp is pinned in requirements.txt, so an
+            # ImportError here means the install step silently failed
+            # (which is exactly the bug observed on the RadLab VM).
+            self._import_error = str(e)
+            logger.error(
+                "pysnmp import failed: %s. "
+                "SNMP polling is unavailable. "
+                "Check that `pip install -r requirements.txt` completed "
+                "without errors; pysnmp==6.2.6 should install cleanly on "
+                "Python 3.10+.",
+                e,
+            )
 
     @property
     def available(self) -> bool:

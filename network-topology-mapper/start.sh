@@ -22,7 +22,8 @@ if [ ! -d ".venv" ]; then
     python3 -m venv .venv
 fi
 source .venv/bin/activate
-pip install -q -r requirements.txt
+# Show pip output so dependency install failures (e.g. pysnmp) aren't silent.
+pip install -r requirements.txt
 
 # Start backend in background
 uvicorn app.main:app --reload --port 8000 &
