@@ -21,13 +21,22 @@ Network-Topology-Scanner/
 │   ├── Abstract.md
 │   └── Problem-Statement.md
 └── network-topology-mapper/        ← All application code lives here
-    ├── demo.sh                     ← Start/stop/scan/status commands
+    ├── demo.sh                     ← Start/stop/scan/status commands (Docker demo)
+    ├── start.sh                    ← Local dev startup script (Linux/macOS)
+    ├── start.bat                   ← Local dev startup script (Windows)
     ├── .env.example                ← Template — copy to .env for local dev
+    ├── .env.demo                   ← Pre-configured for Docker demo (committed, no secrets)
     ├── .env.dockerless             ← Pre-configured for bare-metal dev
     ├── .gitignore
     ├── README.md
+    ├── docker-compose.yml          ← Base Docker Compose for stack
+    ├── docker-compose.demo.yml     ← Demo overlay (adds simulated network devices)
     ├── backend/                    ← FastAPI Python backend
     │   ├── requirements.txt
+    │   ├── Dockerfile              ← Backend container image
+    │   ├── seed_data.py            ← CLI tool to seed topology from JSON
+    │   ├── scripts/
+    │   │   └── import_topology_json.py  ← CLI tool to import topology JSON
     │   ├── app/
     │   │   ├── main.py             ← App entry point, lifespan, router registration
     │   │   ├── config.py           ← Pydantic settings (reads .env)
@@ -47,7 +56,7 @@ Network-Topology-Scanner/
     │   │   │   ├── settings.py
     │   │   │   ├── simulation.py
     │   │   │   ├── snapshots.py
-    │   │   │   └── topology.py
+    │   │   │   └── topology.py     ← Also serves /api/devices/* routes
     │   │   ├── services/           ← Business logic (no HTTP handling here)
     │   │   │   ├── ai/             ← Anomaly detection, failure prediction, reports, scan optimizer
     │   │   │   │   ├── anomaly_detector.py
@@ -71,12 +80,17 @@ Network-Topology-Scanner/
     │   │   │   │   ├── event_bus.py
     │   │   │   │   └── ws_manager.py
     │   │   │   └── mock_data.py    ← Dev fallback data
+    │   │   ├── utils/              ← Cross-platform utilities
+    │   │   │   └── platform_utils.py  ← Interface detection, privilege checks, nmap flags
     │   │   └── tasks/              ← Background tasks (asyncio, NOT Celery)
     │   │       ├── analysis_tasks.py
     │   │       └── scan_tasks.py
     │   └── tests/
-    │       └── test_connection_inference.py
+    │       ├── test_connection_inference.py
+    │       └── test_platform_utils.py
     ├── frontend/                   ← React 18 + TypeScript + Vite
+    │   ├── Dockerfile              ← Frontend container image (nginx)
+    │   ├── nginx.conf              ← Production nginx config
     │   └── src/
     │       ├── App.tsx
     │       ├── components/
@@ -117,7 +131,7 @@ Network-Topology-Scanner/
 4. **Do NOT add Celery back.** Scheduling uses asyncio in `main.py` lifespan. This was a deliberate architectural decision.
 5. **Do NOT commit `.env` files.** Use `.env.example` as the template. `.env.demo` is committed intentionally (no secrets).
 6. **Do NOT modify `Research-Paper/`** without explicit team discussion — this is shared academic work.
-7. **All backend code** goes under `backend/app/`. No Python files at `backend/` root except `requirements.txt`.
+7. **All backend code** goes under `backend/app/`. No Python files at `backend/` root except `requirements.txt`, `seed_data.py`, and `scripts/`.
 8. **All frontend components** follow the existing subdirectory convention: `components/dashboard/`, `components/graph/`, `components/layout/`, `components/panels/`, `components/shared/`.
 9. **New API routes** get their own file in `routers/` and must be registered in `main.py`.
 10. **New services** get their own file in the appropriate `services/` subdirectory.
@@ -156,7 +170,7 @@ Scopes: `scanner`, `inference`, `graph`, `frontend`, `api`, `docker`, `demo`, `a
 Do not change without team discussion.
 
 | Layer | Technology |
-|-------|-----------|
+|-------|------------|
 | Backend | Python 3.11+, FastAPI, Uvicorn |
 | Topology DB | SQLite + NetworkX (graph storage + SPOF queries) |
 | Cache / Pubsub | Redis 7 |
@@ -224,7 +238,7 @@ npm install && npm run dev
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/scan` | Trigger scan (body: `{"target": "172.20.0.0/24"}`) |
+| `POST` | `/api/scans` | Trigger scan (body: `{"type": "full", "target": "172.20.0.0/24", "intensity": "normal"}`) |
 | `GET` | `/api/topology` | Full topology (nodes + edges) |
 | `GET` | `/api/topology/stats` | Aggregate stats |
 | `GET` | `/api/devices/{id}` | Device details |
@@ -244,4 +258,9 @@ npm install && npm run dev
 | `GET` | `/api/settings` | Current settings |
 | `PUT` | `/api/settings` | Update settings |
 | `GET` | `/api/scan-optimizer/recommendations` | AI scan recommendations |
-| `WS` | `/ws` | Real-time events |
+| `GET` | `/api/health` | Service health check |
+| `POST` | `/api/topology/import` | Bulk import devices/connections |
+| `POST` | `/api/topology/clear` | Clear all topology data |
+| `GET` | `/api/reports/changelog` | Topology change history |
+| `GET` | `/api/alerts/stream` | SSE alert stream |
+| `WS` | `/ws/topology` | Real-time events |
