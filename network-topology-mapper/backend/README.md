@@ -18,35 +18,44 @@ The backend handles:
 app/
 ├── main.py                 # FastAPI application entry point
 ├── config.py              # Configuration management
-├── models/                # Data models (Pydantic + SQLAlchemy)
+├── models/                # Pydantic data models
 │   ├── device.py
 │   ├── connection.py
 │   ├── alert.py
 │   └── scan.py
 ├── routers/               # API route handlers
-│   ├── topology.py
-│   ├── devices.py
+│   ├── topology.py        # Topology + device routes
 │   ├── scans.py
 │   ├── simulation.py
 │   ├── alerts.py
-│   └── reports.py
+│   ├── reports.py
+│   ├── snapshots.py
+│   └── settings.py
 ├── services/              # Business logic layer
 │   ├── scanner/           # Network scanning services
 │   │   ├── active_scanner.py
 │   │   ├── passive_scanner.py
 │   │   ├── snmp_poller.py
+│   │   ├── config_puller.py
+│   │   ├── connection_inference.py
 │   │   └── scan_coordinator.py
 │   ├── graph/             # Graph analysis services
 │   │   ├── graph_builder.py
 │   │   ├── failure_simulator.py
+│   │   ├── path_analyzer.py
 │   │   ├── spof_detector.py
 │   │   └── resilience_scorer.py
 │   ├── ai/                # AI/ML services
 │   │   ├── anomaly_detector.py
-│   │   └── report_generator.py
-│   └── realtime/          # WebSocket & events
-│       ├── event_bus.py
-│       └── ws_manager.py
+│   │   ├── failure_predictor.py
+│   │   ├── report_generator.py
+│   │   └── scan_optimizer.py
+│   ├── realtime/          # WebSocket & events
+│   │   ├── event_bus.py
+│   │   └── ws_manager.py
+│   └── mock_data.py       # Dev fallback data
+├── utils/                 # Cross-platform utilities
+│   └── platform_utils.py  # Interface detection, privilege checks
 ├── tasks/                 # Asyncio background tasks
 │   ├── scan_tasks.py
 │   └── analysis_tasks.py
@@ -129,27 +138,15 @@ flake8 app/
 mypy app/
 ```
 
-### Database Migrations
-
-```bash
-# Create migration
-alembic revision --autogenerate -m "description"
-
-# Apply migrations
-alembic upgrade head
-
-# Rollback
-alembic downgrade -1
-```
-
 ## Key Services
 
 ### Scanner Services
 
 **Active Scanner** (`services/scanner/active_scanner.py`):
-- Uses python-nmap wrapper
+- Uses nmap via subprocess (NOT python-nmap)
 - Discovers devices via network probing
 - Identifies open ports and services
+- Platform-aware privilege detection (privileged SYN scans or unprivileged TCP connect)
 
 **Passive Scanner** (`services/scanner/passive_scanner.py`):
 - Scapy-based packet capture
@@ -256,10 +253,24 @@ GET    /api/reports/resilience    - AI resilience report
 GET    /api/reports/changelog     - Topology changes
 ```
 
+### Snapshots
+
+```
+GET    /api/snapshots             - List snapshots
+GET    /api/snapshots/{id}        - Get specific snapshot
+```
+
+### Settings
+
+```
+GET    /api/settings              - Get settings
+PUT    /api/settings              - Update settings
+```
+
 ### WebSocket
 
 ```
-WS     /ws/topology               - Real-time events
+WS     /ws/topology              - Real-time events
 ```
 
 ## Database Models
@@ -281,11 +292,10 @@ Scheduled via asyncio tasks in the FastAPI lifespan function (`main.py`).
 
 ### Task Schedule
 
-- **Full scan**: Every 6 hours
-- **SNMP poll**: Every 30 minutes
-- **Topology snapshot**: Daily at midnight
-- **SPOF detection**: After topology changes
-- **Risk score calculation**: Hourly
+Configured via `SCAN_INTERVAL_MINUTES` in `.env` (default: 5 minutes, 0 = disabled).
+
+- **Periodic full scan**: Every N minutes (configurable)
+- **Post-scan analysis**: Runs after each scan (anomaly detection, SPOF detection)
 
 ## Configuration
 
@@ -301,9 +311,8 @@ SCAN_DEFAULT_RANGE=192.168.0.0/16
 SCAN_RATE_LIMIT=1000
 SNMP_COMMUNITY=public
 
-# AI
+# AI (optional — resilience reports require this)
 ANTHROPIC_API_KEY=sk-ant-...
-CLAUDE_MODEL=claude-sonnet-4-5-20250929
 
 # Server
 APP_HOST=0.0.0.0
@@ -313,24 +322,15 @@ LOG_LEVEL=INFO
 
 ## Logging
 
-Structured JSON logging:
+Dual-output logging configured in `main.py`:
+- **Console** (stdout): INFO and above
+- **File** (`data/nts-debug.log`): DEBUG and above (full trace)
 
 ```python
 import logging
-
 logger = logging.getLogger(__name__)
-
-logger.info(
-    "Scan completed",
-    extra={
-        "scan_id": scan_id,
-        "devices_found": count,
-        "duration_ms": duration
-    }
-)
+logger.info("Scan completed for %s", target)
 ```
-
-Logs are output to stdout in JSON format for easy parsing.
 
 ## Error Handling
 
@@ -368,15 +368,6 @@ All endpoints return consistent error responses:
 - Connection pooling for Redis
 - Async I/O throughout
 
-### Monitoring
-
-Prometheus metrics exposed at `/metrics`:
-
-- Request count/duration
-- Active scan count
-- WebSocket connection count
-- Database query duration
-
 ## Troubleshooting
 
 ### Common Issues
@@ -407,17 +398,13 @@ uvicorn app.main:app --reload
 
 ### Unit Tests
 
-Test individual services:
 ```bash
-pytest tests/services/
+python -m pytest tests/
 ```
 
-### Integration Tests
-
-Test full workflows:
-```bash
-pytest tests/integration/
-```
+Tests exist for:
+- `tests/test_connection_inference.py` — connection inference logic
+- `tests/test_platform_utils.py` — platform detection and nmap flags
 
 ### Mock Data
 
