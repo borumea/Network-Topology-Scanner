@@ -1,19 +1,24 @@
 import logging
 import uuid
 from datetime import datetime
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Iterable, Optional, Union
 import threading
 
 logger = logging.getLogger(__name__)
 
 
 class PassiveScanner:
-    """Uses Scapy to passively sniff ARP, DNS, DHCP traffic."""
+    """Uses Scapy to passively sniff ARP, DNS, DHCP traffic.
+
+    Runs one sniffer thread per interface so multi-homed hosts (e.g. VMs
+    straddling several Docker networks) capture traffic on every leg, not
+    just the default-route interface.
+    """
 
     def __init__(self):
         self._scapy = None
         self._running = False
-        self._thread: Optional[threading.Thread] = None
+        self._threads: list[threading.Thread] = []
         self._callback: Optional[Callable] = None
         try:
             from scapy.all import sniff, ARP, DNS, DHCP
@@ -29,12 +34,19 @@ class PassiveScanner:
     def is_running(self) -> bool:
         return self._running
 
-    def start(self, interface: Optional[str] = None, callback: Callable = None):
+    def start(
+        self,
+        interface: Union[str, Iterable[str], None] = None,
+        callback: Callable = None,
+    ):
         """
-        Start passive scanning.
+        Start passive scanning on one or more interfaces.
 
         Args:
-            interface: Network interface to sniff on. If None, uses config default.
+            interface: Interface name, iterable of names, or None. When
+                None, the configured SCAN_PASSIVE_INTERFACE (comma-separated
+                list allowed) is used; if that's empty, all UP non-loopback
+                interfaces are sniffed.
             callback: Function called for each discovered device.
         """
         if not self._scapy:
@@ -45,26 +57,44 @@ class PassiveScanner:
             logger.warning("Passive scanner already running")
             return
 
-        # Auto-detect interface if not provided
-        if interface is None:
-            from app.config import get_settings
-            interface = get_settings().get_passive_interface()
+        interfaces = self._resolve_interfaces(interface)
+        if not interfaces:
+            logger.warning("Passive scanner has no interfaces to sniff — skipping")
+            return
 
         self._callback = callback
         self._running = True
-        self._thread = threading.Thread(
-            target=self._sniff_loop,
-            args=(interface,),
-            daemon=True,
-        )
-        self._thread.start()
-        logger.info("Passive scanner started on %s", interface)
+        self._threads = []
+        for iface in interfaces:
+            t = threading.Thread(
+                target=self._sniff_loop,
+                args=(iface,),
+                daemon=True,
+                name=f"passive-sniffer-{iface}",
+            )
+            t.start()
+            self._threads.append(t)
+        logger.info("Passive scanner started on %d interface(s): %s",
+                    len(interfaces), ", ".join(interfaces))
 
     def stop(self):
         self._running = False
-        if self._thread:
-            self._thread.join(timeout=5)
+        for t in self._threads:
+            t.join(timeout=5)
+        self._threads = []
         logger.info("Passive scanner stopped")
+
+    def _resolve_interfaces(
+        self, interface: Union[str, Iterable[str], None]
+    ) -> list[str]:
+        """Normalize the argument into a concrete list of interface names."""
+        if interface is None:
+            from app.config import get_settings
+            return get_settings().get_passive_interfaces()
+        if isinstance(interface, str):
+            # Allow comma-separated strings to pass through directly.
+            return [s.strip() for s in interface.split(",") if s.strip()]
+        return [s for s in interface if s]
 
     def _sniff_loop(self, interface: str):
         from scapy.all import sniff
@@ -85,8 +115,7 @@ class PassiveScanner:
                 stop_filter=lambda _: not self._running,
             )
         except Exception as e:
-            logger.error("Passive sniffing error: %s", e)
-            self._running = False
+            logger.error("Passive sniffing error on %s: %s", interface, e)
 
     def _process_packet(self, pkt) -> Optional[dict]:
         from scapy.all import ARP, DNS, DHCP, IP

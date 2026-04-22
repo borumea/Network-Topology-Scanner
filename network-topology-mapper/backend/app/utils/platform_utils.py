@@ -61,6 +61,47 @@ def get_default_interface() -> str:
         return _get_unix_default_interface()
 
 
+def get_all_up_interfaces() -> list[str]:
+    """
+    Return the names of every UP, non-loopback network interface.
+
+    Used by the passive scanner so a multi-homed host (e.g. a VM on three
+    Docker networks) sniffs every leg, not just the default route.
+    Falls back to [get_default_interface()] on platforms we can't fully
+    enumerate.
+    """
+    if is_linux():
+        ifaces = _get_linux_up_interfaces()
+        if ifaces:
+            return ifaces
+    # macOS / Windows / fallback: at least return the default route interface
+    default = get_default_interface()
+    return [default] if default else []
+
+
+def _get_linux_up_interfaces() -> list[str]:
+    """Enumerate UP, non-loopback interfaces from /sys/class/net."""
+    interfaces = []
+    try:
+        for iface in sorted(os.listdir("/sys/class/net")):
+            if iface == "lo":
+                continue
+            operstate_path = f"/sys/class/net/{iface}/operstate"
+            try:
+                with open(operstate_path) as f:
+                    state = f.read().strip()
+            except OSError:
+                continue
+            # "up" means administratively + operationally up.
+            # Some virtual interfaces report "unknown" but still carry traffic
+            # (e.g. tun/tap, some container veths); include those too.
+            if state in ("up", "unknown"):
+                interfaces.append(iface)
+    except OSError as e:
+        logger.warning("Could not enumerate /sys/class/net: %s", e)
+    return interfaces
+
+
 def _get_unix_default_interface() -> str:
     """Get default interface on Linux/macOS by checking the default route."""
     try:

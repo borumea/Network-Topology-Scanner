@@ -237,15 +237,17 @@ class ScanCoordinator:
             return
 
         settings = get_settings()
-        interface = settings.get_passive_interface()
+        interfaces = settings.get_passive_interfaces()
 
         collected = []
 
         def on_passive_device(device):
             collected.append(device)
 
-        logger.info("Starting passive scan on %s for %ds", interface, PASSIVE_SCAN_DURATION)
-        passive_scanner.start(interface=interface, callback=on_passive_device)
+        logger.info("Starting passive scan on %s for %ds",
+                    ", ".join(interfaces) if interfaces else "(none)",
+                    PASSIVE_SCAN_DURATION)
+        passive_scanner.start(interface=interfaces, callback=on_passive_device)
         time.sleep(PASSIVE_SCAN_DURATION)
         passive_scanner.stop()
 
