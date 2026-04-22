@@ -153,7 +153,52 @@ class TopologyDB:
     # ---- connection operations ----
 
     def upsert_connection(self, conn: dict) -> None:
+        """Upsert a connection, deduplicating by endpoint pair (undirected).
+
+        If a connection already exists between these two devices in either
+        direction, its existing row is updated instead of inserting a new one.
+        This keeps inference reruns idempotent — otherwise each rescan
+        generated a fresh UUID and produced parallel edges in the graph.
+        """
+        source_id = conn.get("source_id")
+        target_id = conn.get("target_id")
+        if not source_id or not target_id:
+            return
+        if source_id == target_id:
+            return  # no self-loops
+
+        cursor = self._conn.cursor()
+        cursor.execute(
+            "SELECT id, source_id, target_id FROM connections "
+            "WHERE (source_id = ? AND target_id = ?) "
+            "OR (source_id = ? AND target_id = ?)",
+            (source_id, target_id, target_id, source_id),
+        )
+        existing = cursor.fetchone()
+        if existing:
+            conn = dict(conn)
+            conn["id"] = existing["id"]
+            # Preserve the stored direction to keep the edge stable.
+            conn["source_id"] = existing["source_id"]
+            conn["target_id"] = existing["target_id"]
+
         self._upsert("connections", _CONNECTION_COLS, conn)
+
+    def get_connection_by_endpoints(
+        self, source_id: str, target_id: str
+    ) -> Optional[dict]:
+        """Return the stored connection row between two devices, if any."""
+        cursor = self._conn.cursor()
+        cursor.execute(
+            "SELECT * FROM connections "
+            "WHERE (source_id = ? AND target_id = ?) "
+            "OR (source_id = ? AND target_id = ?)",
+            (source_id, target_id, target_id, source_id),
+        )
+        row = cursor.fetchone()
+        if row:
+            return _deserialize_connection(dict(row))
+        return None
 
     def get_all_connections(self) -> list[dict]:
         cursor = self._conn.cursor()
