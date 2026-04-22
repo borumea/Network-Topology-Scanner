@@ -32,20 +32,22 @@ src/
 │   │   ├── GraphControls.tsx
 │   │   ├── LayerToggle.tsx
 │   │   ├── MiniMap.tsx
-│   │   └── NodeTooltip.tsx
+│   │   ├── NodeTooltip.tsx
+│   │   └── EdgeLabel.tsx
 │   ├── panels/           # Side panels
 │   │   ├── DeviceInspector.tsx
 │   │   ├── AlertFeed.tsx
+│   │   ├── ScanStatus.tsx
 │   │   ├── SimulationPanel.tsx
 │   │   └── ResilienceReport.tsx
 │   ├── dashboard/        # Dashboard widgets
 │   │   ├── MetricsBar.tsx
+│   │   ├── DependencyMatrix.tsx
 │   │   ├── RiskHeatmap.tsx
 │   │   └── TimelineView.tsx
 │   ├── shared/           # Reusable UI components
-│   │   ├── Button.tsx
-│   │   ├── Card.tsx
 │   │   ├── DeviceIcon.tsx
+│   │   ├── RiskScore.tsx
 │   │   └── StatusBadge.tsx
 │   └── layout/           # Layout components
 │       ├── AppShell.tsx
@@ -61,14 +63,13 @@ src/
 │   ├── filterStore.ts
 │   └── settingsStore.ts
 ├── lib/                  # Utilities
+│   ├── api.ts
 │   ├── cytoscape-config.ts
 │   ├── graph-utils.ts
-│   ├── api.ts
-│   └── utils.ts
+│   └── node-icons.ts
 ├── types/                # TypeScript types
 │   ├── topology.ts
-│   ├── device.ts
-│   └── api.ts
+│   └── cytoscape-extensions.d.ts
 ├── App.tsx               # Root component
 └── main.tsx              # Entry point
 ```
@@ -659,7 +660,7 @@ Create `.env.local`:
 
 ```bash
 VITE_API_URL=http://localhost:8000
-VITE_WS_URL=ws://localhost:8000/ws
+VITE_WS_URL=ws://localhost:8000/ws/topology
 VITE_ENABLE_MOCK_DATA=false
 ```
 
@@ -757,7 +758,7 @@ Set production environment variables:
 
 ```bash
 VITE_API_URL=https://api.yourdomcain.com
-VITE_WS_URL=wss://api.yourdomain.com/ws
+VITE_WS_URL=wss://api.yourdomain.com/ws/topology
 ```
 
 ## Resources
