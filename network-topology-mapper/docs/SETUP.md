@@ -38,8 +38,8 @@ Complete installation and configuration guide for Network Topology Mapper.
 **For Local Development**:
 - Python 3.11+
 - Node.js 18+
-- Redis 7.0+
 - nmap (for network scanning)
+- Redis 7.0+ (optional — pub/sub and cache features unavailable without it)
 
 ---
 
@@ -90,9 +90,9 @@ This starts all services on the `nts-net` bridge network:
 Or via API:
 
 ```bash
-curl -X POST http://localhost:8000/api/scan \
+curl -X POST http://localhost:8000/api/scans \
   -H "Content-Type: application/json" \
-  -d '{"target": "172.20.0.0/24"}'
+  -d '{"type": "active", "target": "172.20.0.0/24", "intensity": "normal"}'
 ```
 
 ### 5. Access Application
@@ -245,10 +245,8 @@ SSH_KEY_PATH=
 #### AI Configuration
 
 ```bash
-# Anthropic Claude API
+# Anthropic Claude API (optional — resilience reports require this)
 ANTHROPIC_API_KEY=sk-ant-...
-CLAUDE_MODEL=claude-sonnet-4-5-20250929
-CLAUDE_MAX_TOKENS=4000
 ```
 
 #### Application Configuration
