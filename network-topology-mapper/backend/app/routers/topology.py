@@ -4,6 +4,7 @@ from typing import Optional
 from app.services.graph.graph_builder import graph_builder
 from app.db.topology_db import topology_db
 from app.services.graph.resilience_scorer import resilience_scorer
+from app.services.realtime.event_bus import event_bus
 
 router = APIRouter(prefix="/api", tags=["topology"])
 
@@ -75,9 +76,15 @@ def import_topology(payload: dict):
     return result
 
 
-@router.post("/topology/clear")
-def clear_topology():
+@router.delete("/topology")
+def reset_topology():
+    """Clear all devices, connections, and dependencies from the DB.
+
+    Intended for dev/test workflows where scans need to start from a clean
+    slate. Broadcasts a topology_cleared event so connected clients refresh.
+    """
     topology_db.clear_all()
+    event_bus.publish_topology_cleared()
     return {"status": "ok", "message": "All devices, connections, and dependencies cleared."}
 
 

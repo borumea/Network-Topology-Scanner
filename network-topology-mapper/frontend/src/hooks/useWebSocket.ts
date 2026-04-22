@@ -13,7 +13,7 @@ export function useWebSocket() {
   const reconnectRef = useRef<number>();
   const [connected, setConnected] = useState(false);
 
-  const { addDevice, updateDevice, removeDevice, updateConnection } = useTopologyStore();
+  const { addDevice, updateDevice, removeDevice, updateConnection, clearTopology } = useTopologyStore();
 
   const handleMessage = useCallback(
     (event: MessageEvent) => {
@@ -33,6 +33,9 @@ export function useWebSocket() {
           case 'connection_change':
             updateConnection(msg.data as Connection);
             break;
+          case 'topology_cleared':
+            clearTopology();
+            break;
           case 'alert':
             // Alerts handled by useAlerts hook
             window.dispatchEvent(new CustomEvent('ws-alert', { detail: msg.data }));
@@ -47,7 +50,7 @@ export function useWebSocket() {
         console.error('WebSocket message parse error:', e);
       }
     },
-    [addDevice, updateDevice, removeDevice, updateConnection]
+    [addDevice, updateDevice, removeDevice, updateConnection, clearTopology]
   );
 
   const connect = useCallback(() => {

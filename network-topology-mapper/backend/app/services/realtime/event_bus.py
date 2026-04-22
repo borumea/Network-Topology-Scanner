@@ -30,6 +30,11 @@ class EventBus:
         redis_client.publish(CHANNEL_TOPOLOGY, message)
         self._notify_ws(message)
 
+    def publish_topology_cleared(self):
+        message = {"type": "topology_cleared", "data": {}}
+        redis_client.publish(CHANNEL_TOPOLOGY, message)
+        self._notify_ws(message)
+
     def publish_alert(self, alert_data: dict):
         message = {"type": "alert", "data": alert_data}
         redis_client.publish(CHANNEL_ALERTS, message)

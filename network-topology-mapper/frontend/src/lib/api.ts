@@ -20,7 +20,7 @@ export const fetchTopology = (params?: Record<string, string>) => {
 export const fetchTopologyStats = () => request<any>('/topology/stats');
 
 export const clearTopology = () =>
-  request<any>('/topology/clear', { method: 'POST' });
+  request<any>('/topology', { method: 'DELETE' });
 
 export const fetchDevice = (id: string) => request<any>(`/devices/${id}`);
 

@@ -39,6 +39,7 @@ interface TopologyState {
   updateDevice: (device: Device) => void;
   removeDevice: (deviceId: string) => void;
   updateConnection: (connection: Connection) => void;
+  clearTopology: () => void;
   selectDevice: (deviceId: string | null) => void;
   selectConnection: (connectionId: string | null) => void;
   setSimulationResult: (result: SimulationResult | null) => void;
@@ -105,6 +106,17 @@ export const useTopologyStore = create<TopologyState>((set) => ({
         c.id === connection.id ? { ...c, ...connection } : c
       ),
     })),
+
+  clearTopology: () =>
+    set({
+      devices: [],
+      connections: [],
+      dependencies: [],
+      stats: null,
+      selectedDeviceId: null,
+      selectedConnectionId: null,
+      spofs: [],
+    }),
 
   selectDevice: (deviceId) =>
     set({
