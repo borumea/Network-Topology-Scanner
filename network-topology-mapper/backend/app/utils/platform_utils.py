@@ -81,41 +81,55 @@ def get_all_up_interfaces() -> list[str]:
     return [default] if default else []
 
 
-def get_local_subnets() -> list[str]:
-    """Return IPv4 CIDRs for every UP, non-loopback interface.
+def get_local_addresses() -> list[dict]:
+    """Return one dict per UP, non-loopback IPv4 interface.
 
-    Used by the scanner so a UI-triggered "scan my network" covers every
-    subnet the host is actually attached to (e.g. a multi-homed VM on three
-    Docker networks) instead of defaulting to an unrelated 192.168.0.0/16.
+    Each entry: {"name": str, "ip": str, "mac": str, "cidr": str}.
+    Used so the scanner host can be rendered as a single node that bridges
+    every subnet it sits on, instead of leaking one device record per leg
+    of a multi-homed setup.
     """
-    raw: list[str] = []
     if is_linux():
-        raw = _get_linux_subnets()
+        raw = _get_linux_addresses()
     elif is_windows():
-        raw = _get_windows_subnets()
+        raw = _get_windows_addresses()
     elif is_macos():
-        raw = _get_macos_subnets()
+        raw = _get_macos_addresses()
+    else:
+        raw = []
 
-    seen: set[str] = set()
-    result: list[str] = []
-    for cidr in raw:
+    result: list[dict] = []
+    for entry in raw:
+        cidr = entry.get("cidr")
+        if not cidr:
+            continue
         try:
             net = ipaddress.ip_network(cidr, strict=False)
         except ValueError:
             continue
         if net.is_loopback or net.is_link_local or net.prefixlen == 32:
             continue
-        canonical = str(net)
-        if canonical in seen:
-            continue
-        seen.add(canonical)
-        result.append(canonical)
+        entry["cidr"] = str(net)
+        result.append(entry)
     return result
 
 
-def _get_linux_subnets() -> list[str]:
-    """Parse `ip -j -4 addr show` to enumerate IPv4 subnets per interface."""
-    subnets: list[str] = []
+def get_local_subnets() -> list[str]:
+    """Return IPv4 CIDRs for every UP, non-loopback interface (deduped)."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for addr in get_local_addresses():
+        cidr = addr.get("cidr")
+        if not cidr or cidr in seen:
+            continue
+        seen.add(cidr)
+        out.append(cidr)
+    return out
+
+
+def _get_linux_addresses() -> list[dict]:
+    """Parse `ip -j -4 addr show` for IPv4 addresses + MACs per interface."""
+    addresses: list[dict] = []
     try:
         result = subprocess.run(
             ["ip", "-j", "-4", "addr", "show"],
@@ -125,10 +139,12 @@ def _get_linux_subnets() -> list[str]:
             return []
         data = json.loads(result.stdout)
         for iface in data:
-            if iface.get("ifname") == "lo":
+            name = iface.get("ifname", "")
+            if name == "lo":
                 continue
             if iface.get("operstate") not in ("UP", "UNKNOWN"):
                 continue
+            mac = iface.get("address", "") or ""
             for addr in iface.get("addr_info", []) or []:
                 if addr.get("family") != "inet":
                     continue
@@ -137,25 +153,32 @@ def _get_linux_subnets() -> list[str]:
                 if not local or prefix is None:
                     continue
                 try:
-                    net = ipaddress.ip_interface(f"{local}/{prefix}").network
-                    subnets.append(str(net))
+                    cidr = str(ipaddress.ip_interface(f"{local}/{prefix}").network)
                 except ValueError:
                     continue
+                addresses.append({"name": name, "ip": local, "mac": mac, "cidr": cidr})
     except (subprocess.TimeoutExpired, FileNotFoundError, json.JSONDecodeError, OSError) as e:
-        logger.warning("Could not enumerate local subnets via 'ip -j addr': %s", e)
-    return subnets
+        logger.warning("Could not enumerate local addresses via 'ip -j addr': %s", e)
+    return addresses
 
 
-def _get_windows_subnets() -> list[str]:
-    """Use PowerShell Get-NetIPAddress to enumerate IPv4 subnets."""
-    subnets: list[str] = []
+def _get_windows_addresses() -> list[dict]:
+    """Use PowerShell to pair Get-NetIPAddress with Get-NetAdapter MACs."""
+    addresses: list[dict] = []
     try:
         result = subprocess.run(
             ["powershell", "-NoProfile", "-Command",
              "Get-NetIPAddress -AddressFamily IPv4 | "
              "Where-Object { $_.InterfaceAlias -notlike 'Loopback*' } | "
-             "Select-Object IPAddress, PrefixLength | "
-             "ConvertTo-Json -Compress"],
+             "ForEach-Object { "
+             "  $ad = Get-NetAdapter -InterfaceIndex $_.InterfaceIndex -ErrorAction SilentlyContinue; "
+             "  [PSCustomObject]@{ "
+             "    Name=$_.InterfaceAlias; "
+             "    IPAddress=$_.IPAddress; "
+             "    PrefixLength=$_.PrefixLength; "
+             "    MacAddress=$ad.MacAddress "
+             "  } "
+             "} | ConvertTo-Json -Compress"],
             capture_output=True, text=True, timeout=10
         )
         if result.returncode != 0 or not result.stdout.strip():
@@ -169,18 +192,24 @@ def _get_windows_subnets() -> list[str]:
             if not ip or prefix is None:
                 continue
             try:
-                net = ipaddress.ip_interface(f"{ip}/{prefix}").network
-                subnets.append(str(net))
+                cidr = str(ipaddress.ip_interface(f"{ip}/{prefix}").network)
             except ValueError:
                 continue
+            mac = (entry.get("MacAddress") or "").replace("-", ":").lower()
+            addresses.append({
+                "name": entry.get("Name", ""),
+                "ip": ip,
+                "mac": mac,
+                "cidr": cidr,
+            })
     except (subprocess.TimeoutExpired, FileNotFoundError, json.JSONDecodeError) as e:
-        logger.warning("Could not enumerate local subnets via PowerShell: %s", e)
-    return subnets
+        logger.warning("Could not enumerate local addresses via PowerShell: %s", e)
+    return addresses
 
 
-def _get_macos_subnets() -> list[str]:
-    """Parse `ifconfig` to enumerate IPv4 subnets on macOS."""
-    subnets: list[str] = []
+def _get_macos_addresses() -> list[dict]:
+    """Parse `ifconfig` to pair IPv4 addresses with MACs per interface."""
+    addresses: list[dict] = []
     try:
         result = subprocess.run(
             ["ifconfig"],
@@ -188,26 +217,41 @@ def _get_macos_subnets() -> list[str]:
         )
         if result.returncode != 0:
             return []
+        current_iface = None
+        current_mac = ""
         for raw_line in result.stdout.splitlines():
+            if raw_line and not raw_line.startswith("\t") and not raw_line.startswith(" "):
+                current_iface = raw_line.split(":", 1)[0] if ":" in raw_line else None
+                current_mac = ""
+                continue
             line = raw_line.strip()
-            if not line.startswith("inet ") or "netmask" not in line:
-                continue
-            parts = line.split()
-            try:
-                ip = parts[1]
-                nm_idx = parts.index("netmask") + 1
-                netmask_token = parts[nm_idx]
-                if netmask_token.startswith("0x"):
-                    prefix = bin(int(netmask_token, 16)).count("1")
-                else:
-                    prefix = int(netmask_token)
-                net = ipaddress.ip_interface(f"{ip}/{prefix}").network
-                subnets.append(str(net))
-            except (ValueError, IndexError):
-                continue
+            if line.startswith("ether "):
+                parts = line.split()
+                if len(parts) >= 2:
+                    current_mac = parts[1]
+            elif line.startswith("inet ") and "netmask" in line:
+                parts = line.split()
+                try:
+                    ip = parts[1]
+                    nm_idx = parts.index("netmask") + 1
+                    netmask_token = parts[nm_idx]
+                    if netmask_token.startswith("0x"):
+                        prefix = bin(int(netmask_token, 16)).count("1")
+                    else:
+                        prefix = int(netmask_token)
+                    cidr = str(ipaddress.ip_interface(f"{ip}/{prefix}").network)
+                except (ValueError, IndexError):
+                    continue
+                if current_iface and current_iface != "lo0":
+                    addresses.append({
+                        "name": current_iface,
+                        "ip": ip,
+                        "mac": current_mac,
+                        "cidr": cidr,
+                    })
     except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-        logger.warning("Could not enumerate local subnets via ifconfig: %s", e)
-    return subnets
+        logger.warning("Could not enumerate local addresses via ifconfig: %s", e)
+    return addresses
 
 
 def _get_linux_up_interfaces() -> list[str]:

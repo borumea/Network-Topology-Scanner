@@ -1,4 +1,7 @@
+import ipaddress
 import logging
+import platform
+import socket
 import time
 import uuid
 from datetime import datetime
@@ -19,6 +22,12 @@ logger = logging.getLogger(__name__)
 
 PASSIVE_SCAN_DURATION = 30  # seconds
 
+# Stable identity for the scanner host itself. Using a fixed id means a
+# re-scan updates the same node rather than creating duplicates, and keeps
+# any edges that point at it from a prior scan valid.
+SELF_DEVICE_ID = "device-self"
+SELF_CACHE_KEY = "__self__"
+
 
 def _device_id_from_ip(ip: str, mac: str = "") -> str:
     """Generate a deterministic device ID from IP (preferred) or MAC."""
@@ -29,6 +38,35 @@ def _device_id_from_ip(ip: str, mac: str = "") -> str:
     return str(uuid.uuid4())
 
 
+def _build_self_device(local_addresses: list[dict]) -> dict:
+    """Construct a single device record representing the scanner host.
+
+    Collapses the machine's multiple interface IPs into one node so a
+    multi-homed VM doesn't show up as three separate "extra" leaves.
+    """
+    now = datetime.utcnow().isoformat()
+    primary = local_addresses[0] if local_addresses else {}
+    return {
+        "id": SELF_DEVICE_ID,
+        "ip": primary.get("ip", ""),
+        "mac": primary.get("mac", ""),
+        "hostname": socket.gethostname() or "scanner",
+        "device_type": "workstation",
+        "vendor": "",
+        "os": f"{platform.system()} {platform.release()}".strip(),
+        "open_ports": [],
+        "services": [],
+        "first_seen": now,
+        "last_seen": now,
+        "discovery_method": "self",
+        "status": "online",
+        "risk_score": 0.0,
+        "is_scanner": True,
+        "local_ips": [a.get("ip", "") for a in local_addresses if a.get("ip")],
+        "local_cidrs": [a.get("cidr", "") for a in local_addresses if a.get("cidr")],
+    }
+
+
 class ScanCoordinator:
     """Orchestrates scan phases and deduplicates results."""
 
@@ -37,6 +75,8 @@ class ScanCoordinator:
         self._devices_cache: dict[str, dict] = {}  # keyed by IP or MAC
         self._lldp_data: list[dict] = []
         self._scan_log: list[str] = []
+        self._local_ips: set[str] = set()
+        self._local_addresses: list[dict] = []
 
     def _publish_progress(self, scan_id: str, percent: int, phase: str,
                           devices_found: int, log_msg: str = None):
@@ -58,6 +98,8 @@ class ScanCoordinator:
         self._devices_cache.clear()
         self._lldp_data.clear()
         self._scan_log.clear()
+        self._local_ips = set()
+        self._local_addresses = []
 
         # Resolve "auto" (or empty) to the host's actually-attached subnets.
         # This is what makes a UI-triggered scan cover every Docker network
@@ -94,6 +136,40 @@ class ScanCoordinator:
             logger.warning("Could not pre-load devices from DB: %s", e)
             import traceback
             logger.debug("Pre-load traceback:\n%s", traceback.format_exc())
+
+        # Seed a single "self" device for the scanner host and drop any
+        # stale per-interface copies that a pre-fix scan left in the DB.
+        try:
+            from app.utils.platform_utils import get_local_addresses
+            self._local_addresses = get_local_addresses()
+        except Exception as e:
+            logger.warning("Could not enumerate local addresses: %s", e)
+            self._local_addresses = []
+        self._local_ips = {a.get("ip", "") for a in self._local_addresses if a.get("ip")}
+
+        if self._local_addresses:
+            # Drop stale scanner records keyed by a local IP (from older scans
+            # that didn't know about the self node). Remove from DB too so
+            # the topology graph doesn't keep rendering the ghosts.
+            stale_keys: list[str] = []
+            for key, dev in list(self._devices_cache.items()):
+                if dev.get("id") == SELF_DEVICE_ID:
+                    stale_keys.append(key)
+                    continue
+                if key in self._local_ips:
+                    stale_keys.append(key)
+                    try:
+                        graph_builder.remove_device(dev.get("id", ""))
+                    except Exception as exc:
+                        logger.warning("Failed to remove stale self record %s: %s", dev.get("id"), exc)
+            for k in stale_keys:
+                self._devices_cache.pop(k, None)
+
+            self_device = _build_self_device(self._local_addresses)
+            self._devices_cache[SELF_CACHE_KEY] = self_device
+            graph_builder.upsert_device(self_device)
+            logger.info("Seeded self device %s with IPs %s",
+                        self_device.get("hostname"), self_device.get("local_ips"))
 
         scan_record = {
             "id": scan_id,
@@ -204,7 +280,13 @@ class ScanCoordinator:
                     seen_edges.add(key)
                     inferred_connections.append(conn)
 
-            logger.info("Connection inference returned %d edges", len(inferred_connections))
+            # Anchor the self node to each subnet's gateway so the three
+            # otherwise-isolated subnet trees share a common root.
+            self_edges = self._build_self_edges(seen_edges)
+            inferred_connections.extend(self_edges)
+
+            logger.info("Connection inference returned %d edges (%d anchored at self)",
+                        len(inferred_connections), len(self_edges))
             for conn in inferred_connections:
                 logger.debug("  Edge: %s -> %s (type=%s)", conn.get("source_id"), conn.get("target_id"), conn.get("connection_type"))
                 graph_builder.upsert_connection(conn)
@@ -364,9 +446,112 @@ class ScanCoordinator:
 
         logger.info("Config pull phase complete: %d devices queried via SSH", pulled)
 
+    def _build_self_edges(self, seen_edges: set[frozenset]) -> list[dict]:
+        """Return one edge per local subnet, anchoring self to that gateway.
+
+        Per-subnet inference already connected self to the gateway of the
+        subnet its primary IP sits on; this fills in the remaining legs so
+        multi-homed hosts actually bridge every subnet they're attached to.
+        """
+        if SELF_CACHE_KEY not in self._devices_cache or not self._local_addresses:
+            return []
+
+        self_device = self._devices_cache[SELF_CACHE_KEY]
+        edges: list[dict] = []
+        now = datetime.utcnow().isoformat()
+
+        for addr in self._local_addresses:
+            cidr = addr.get("cidr")
+            if not cidr:
+                continue
+            try:
+                network = ipaddress.ip_network(cidr, strict=False)
+            except ValueError:
+                continue
+
+            gateway = self._find_gateway_in_network(network)
+            if not gateway or gateway.get("id") == self_device.get("id"):
+                continue
+
+            key = frozenset({self_device["id"], gateway["id"]})
+            if key in seen_edges:
+                continue
+            seen_edges.add(key)
+
+            edges.append({
+                "id": str(uuid.uuid4()),
+                "source_id": self_device["id"],
+                "target_id": gateway["id"],
+                "connection_type": "ethernet",
+                "bandwidth": "",
+                "switch_port": "",
+                "vlan": None,
+                "latency_ms": 0.0,
+                "packet_loss_pct": 0.0,
+                "is_redundant": False,
+                "protocol": "routed",
+                "status": "active",
+                "first_seen": now,
+                "last_seen": now,
+            })
+        return edges
+
+    def _find_gateway_in_network(self, network: ipaddress.IPv4Network) -> Optional[dict]:
+        """Same precedence as ConnectionInferenceEngine._find_gateway, but
+        scoped to one subnet and excluding the self device."""
+        candidates = [
+            d for d in self._devices_cache.values()
+            if d.get("id") != SELF_DEVICE_ID
+        ]
+
+        for d in candidates:
+            if not d.get("is_gateway"):
+                continue
+            if self._ip_in(d.get("ip", ""), network):
+                return d
+
+        for d in candidates:
+            if d.get("device_type") != "router":
+                continue
+            if self._ip_in(d.get("ip", ""), network):
+                return d
+
+        gateway_ip = str(network.network_address + 1)
+        for d in candidates:
+            if d.get("ip") == gateway_ip:
+                return d
+        return None
+
+    @staticmethod
+    def _ip_in(ip: str, network: ipaddress.IPv4Network) -> bool:
+        if not ip:
+            return False
+        try:
+            return ipaddress.ip_address(ip) in network
+        except ValueError:
+            return False
+
     def _deduplicate_and_store(self, device: dict):
         key = device.get("ip") or device.get("mac", "")
         if not key:
+            return
+
+        # If this device's IP matches one of the scanner's interfaces, fold
+        # its findings into the single self node instead of creating another
+        # per-interface duplicate.
+        if key in self._local_ips and SELF_CACHE_KEY in self._devices_cache:
+            existing = self._devices_cache[SELF_CACHE_KEY]
+            for k, v in device.items():
+                if not v or k in ("id", "ip", "mac", "hostname", "device_type"):
+                    continue
+                if k == "open_ports":
+                    existing["open_ports"] = sorted(set(existing.get("open_ports", [])) | set(v))
+                elif k == "services":
+                    existing["services"] = sorted(set(existing.get("services", [])) | set(v))
+                else:
+                    existing[k] = v
+            existing["last_seen"] = datetime.utcnow().isoformat()
+            graph_builder.upsert_device(existing)
             return
 
         if key in self._devices_cache:
