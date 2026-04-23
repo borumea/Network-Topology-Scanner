@@ -122,7 +122,7 @@ network-topology-mapper/
 ```bash
 curl -X POST http://localhost:8000/api/scans \
   -H "Content-Type: application/json" \
-  -d '{"type": "full", "target": "192.168.0.0/16"}'
+  -d '{"type": "full", "target": "auto"}'
 ```
 
 ### Get Topology Data

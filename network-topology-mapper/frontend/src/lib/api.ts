@@ -31,11 +31,17 @@ export const fetchDeviceDependencies = (id: string) =>
   request<any>(`/devices/${id}/dependencies`);
 
 // Scans
-export const triggerScan = (type: string = 'full', target: string = '192.168.0.0/16', intensity: string = 'normal') =>
+// Default target "auto" tells the backend to resolve the scan target from
+// locally-attached interfaces (every UP subnet), which matches what the user
+// expects when they hit "Scan My Network" on a multi-homed host.
+export const triggerScan = (type: string = 'full', target: string = 'auto', intensity: string = 'normal') =>
   request<any>('/scans', {
     method: 'POST',
     body: JSON.stringify({ type, target, intensity }),
   });
+
+export const fetchNetworkInterfaces = () =>
+  request<{ subnets: string[] }>('/network/interfaces');
 
 export const fetchScans = () => request<any>('/scans');
 

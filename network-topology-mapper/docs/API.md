@@ -284,7 +284,7 @@ POST /api/scans
 ```json
 {
   "type": "full",
-  "target": "192.168.0.0/16",
+  "target": "auto",
   "intensity": "normal",
   "options": {
     "active_scan": true,
@@ -299,7 +299,7 @@ POST /api/scans
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `type` | string | Yes | `full`, `active`, `passive`, `snmp` |
-| `target` | string | Yes | CIDR range or `all` |
+| `target` | string | No  | CIDR, comma-separated CIDRs, or `auto` (default) — `auto` resolves to every UP interface's IPv4 subnet at scan time |
 | `intensity` | string | No | `light`, `normal`, `deep` (default: `normal`) |
 | `options` | object | No | Scan configuration options |
 
@@ -342,7 +342,7 @@ GET /api/scans
       "status": "completed",
       "started_at": "2026-02-11T10:00:00Z",
       "completed_at": "2026-02-11T10:04:23Z",
-      "target_range": "192.168.0.0/16",
+      "target_range": "192.168.1.0/24",
       "devices_found": 247,
       "new_devices": 3
     }
@@ -378,7 +378,7 @@ GET /api/scans/{scan_id}
     "eta": "2m 10s"
   },
   "config": {
-    "target": "192.168.0.0/16",
+    "target": "192.168.1.0/24",
     "intensity": "normal",
     "options": {}
   }
@@ -817,7 +817,7 @@ All error responses follow this format:
     "details": {
       "field": "target",
       "value": "192.168.1.0/99",
-      "expected": "Valid CIDR notation (e.g., 192.168.0.0/16)"
+      "expected": "Valid CIDR notation (e.g., 192.168.1.0/24), comma-separated CIDRs, or \"auto\""
     }
   }
 }

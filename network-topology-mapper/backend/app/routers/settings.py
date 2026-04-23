@@ -5,6 +5,20 @@ from app.config import get_settings
 from app.db.sqlite_db import sqlite_db
 from app.services.ai.scan_optimizer import scan_optimizer
 from app.services.graph.graph_builder import graph_builder
+from app.utils.platform_utils import get_local_subnets
+
+
+def _resolve_scan_range(value: Any) -> Any:
+    """If `scan_default_range` is "auto" (or empty), expand it to the comma-
+    joined list of locally-attached subnets so the frontend gets a real CIDR
+    to show in the scan panel.
+    """
+    if not isinstance(value, str):
+        return value
+    if value.strip().lower() not in ("", "auto"):
+        return value
+    subnets = get_local_subnets()
+    return ", ".join(subnets) if subnets else value
 
 router = APIRouter(prefix="/api", tags=["settings"])
 
@@ -46,6 +60,8 @@ def get_all_settings():
                 merged[key] = val.lower() in ("true", "1", "yes")
             else:
                 merged[key] = val
+
+    merged["scan_default_range"] = _resolve_scan_range(merged.get("scan_default_range"))
     return {"settings": merged, "overrides": list(overrides.keys())}
 
 

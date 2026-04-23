@@ -29,7 +29,9 @@ class Settings(BaseSettings):
     sqlite_path: str = "./data/mapper.db"
 
     # Scanning
-    scan_default_range: str = "192.168.0.0/16"
+    # "auto" resolves to every UP interface's IPv4 subnet at scan time.
+    # Set to an explicit CIDR (or comma-separated CIDRs) to override.
+    scan_default_range: str = "auto"
     scan_rate_limit: int = 1000
     scan_passive_interface: str = ""  # Empty = auto-detect
     snmp_community: str = "public"

@@ -13,7 +13,7 @@ from app.db.sqlite_db import sqlite_db
 from app.db.redis_client import redis_client
 from app.services.realtime.ws_manager import ws_manager
 from app.services.realtime.event_bus import event_bus
-from app.routers import topology, scans, simulation, alerts, reports, snapshots
+from app.routers import topology, scans, simulation, alerts, reports, snapshots, network
 from app.routers import settings as settings_router
 
 # --- Logging setup: console + file ---
@@ -132,6 +132,7 @@ app.include_router(alerts.router)
 app.include_router(reports.router)
 app.include_router(snapshots.router)
 app.include_router(settings_router.router)
+app.include_router(network.router)
 
 
 @app.get("/")

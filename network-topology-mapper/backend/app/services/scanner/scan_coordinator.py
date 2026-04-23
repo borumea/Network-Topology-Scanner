@@ -51,7 +51,7 @@ class ScanCoordinator:
             "log_messages": list(self._scan_log),
         })
 
-    def start_scan(self, scan_type: str = "full", target: str = "192.168.0.0/24",
+    def start_scan(self, scan_type: str = "full", target: str = "auto",
                    intensity: str = "normal", scan_id: Optional[str] = None) -> str:
         scan_id = scan_id or str(uuid.uuid4())
         self._current_scan_id = scan_id
@@ -59,10 +59,26 @@ class ScanCoordinator:
         self._lldp_data.clear()
         self._scan_log.clear()
 
+        # Resolve "auto" (or empty) to the host's actually-attached subnets.
+        # This is what makes a UI-triggered scan cover every Docker network
+        # the VM sits on, instead of a bogus 192.168.0.0/16 default.
+        if target is None or target.strip().lower() in ("", "auto"):
+            from app.utils.platform_utils import get_local_subnets
+            subnets = get_local_subnets()
+            if subnets:
+                target = ",".join(subnets)
+                logger.info("Resolved scan target 'auto' to local subnets: %s", target)
+            else:
+                target = "192.168.0.0/24"
+                logger.warning("Could not auto-detect local subnets; falling back to %s", target)
+
+        target_list = [t.strip() for t in target.split(",") if t.strip()]
+
         logger.info("=" * 60)
         logger.info("SCAN STARTED: id=%s", scan_id)
         logger.info("  scan_type:  %s", scan_type)
         logger.info("  target:     %s", target)
+        logger.info("  subnets:    %s", target_list)
         logger.info("  intensity:  %s", intensity)
         logger.info("=" * 60)
 
@@ -98,14 +114,18 @@ class ScanCoordinator:
             logger.debug("Scan settings: enable_active=%s, enable_passive=%s, enable_snmp=%s",
                          settings.enable_active_scan, settings.enable_passive_scan, settings.enable_snmp_scan)
 
-            # Phase 1: Active scan (nmap)
+            # Phase 1: Active scan (nmap) — one pass per subnet
             phase1_run = scan_type in ("active", "full") and settings.enable_active_scan
-            logger.info("Phase 1 (active nmap): %s (scan_type=%s, enable_active=%s)",
-                        "RUNNING" if phase1_run else "SKIPPED", scan_type, settings.enable_active_scan)
+            logger.info("Phase 1 (active nmap): %s (scan_type=%s, enable_active=%s, subnets=%d)",
+                        "RUNNING" if phase1_run else "SKIPPED", scan_type,
+                        settings.enable_active_scan, len(target_list))
             if phase1_run:
-                self._publish_progress(scan_id, 5, "active_scan", 0,
-                                       "Phase 1: Running nmap host discovery...")
-                self._run_active_scan(scan_id, target, intensity)
+                for idx, subnet in enumerate(target_list, start=1):
+                    self._publish_progress(
+                        scan_id, 5, "active_scan", len(self._devices_cache),
+                        f"Phase 1 ({idx}/{len(target_list)}): nmap {subnet}"
+                    )
+                    self._run_active_scan(scan_id, subnet, intensity)
                 self._publish_progress(scan_id, 35, "active_scan", len(self._devices_cache),
                                        f"Phase 1 complete: {len(self._devices_cache)} devices found")
             else:
@@ -161,16 +181,28 @@ class ScanCoordinator:
                              dev.get("open_ports", []), dev.get("services", []))
             logger.debug("=== END DEVICE CACHE ===")
 
-            # Phase 5: Connection inference
-            logger.info("Phase 5 (connection inference): RUNNING with %d devices", len(self._devices_cache))
+            # Phase 5: Connection inference — once per subnet, then merged.
+            # Each subnet has its own gateway, so inference runs per-subnet;
+            # dedup in _deduplicate_connections collapses any overlaps.
+            logger.info("Phase 5 (connection inference): RUNNING with %d devices across %d subnet(s)",
+                        len(self._devices_cache), len(target_list))
             self._publish_progress(scan_id, 90, "connection_inference", len(self._devices_cache),
                                    "Phase 5: Inferring network connections...")
 
-            inferred_connections = connection_inference.infer_connections(
-                devices=self._devices_cache,
-                target_subnet=target,
-                lldp_data=self._lldp_data if self._lldp_data else None,
-            )
+            inferred_connections: list[dict] = []
+            seen_edges: set[frozenset] = set()
+            for subnet in target_list:
+                part = connection_inference.infer_connections(
+                    devices=self._devices_cache,
+                    target_subnet=subnet,
+                    lldp_data=self._lldp_data if self._lldp_data else None,
+                )
+                for conn in part:
+                    key = frozenset({conn["source_id"], conn["target_id"]})
+                    if key in seen_edges:
+                        continue
+                    seen_edges.add(key)
+                    inferred_connections.append(conn)
 
             logger.info("Connection inference returned %d edges", len(inferred_connections))
             for conn in inferred_connections:

@@ -297,7 +297,9 @@ REDIS_URL=redis://localhost:6379/0
 SQLITE_PATH=./data/mapper.db
 
 # Scanning
-SCAN_DEFAULT_RANGE=192.168.0.0/16
+# "auto" = every UP interface's IPv4 subnet (resolved at scan time).
+# Can also be an explicit CIDR, or a comma-separated list.
+SCAN_DEFAULT_RANGE=auto
 SCAN_RATE_LIMIT=1000
 SNMP_COMMUNITY=public
 

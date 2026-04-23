@@ -66,8 +66,10 @@ Edit `.env` and update required variables:
 # Claude API key (for AI reports)
 ANTHROPIC_API_KEY=sk-ant-your-key-here
 
-# Network scan target (adjust to your network)
-SCAN_DEFAULT_RANGE=192.168.0.0/16
+# Network scan target.
+# "auto" (default) scans every UP interface's IPv4 subnet.
+# Override with an explicit CIDR (or comma-separated CIDRs) if needed.
+SCAN_DEFAULT_RANGE=auto
 ```
 
 ### 3. Start Services
@@ -221,8 +223,10 @@ SQLITE_PATH=./data/mapper.db
 #### Scanning Configuration
 
 ```bash
-# Default scan target
-SCAN_DEFAULT_RANGE=192.168.0.0/16
+# Default scan target.
+# "auto" = every UP interface's IPv4 subnet (resolved at scan time).
+# Also accepts an explicit CIDR or a comma-separated list.
+SCAN_DEFAULT_RANGE=auto
 
 # Scan rate limiting (packets per second)
 SCAN_RATE_LIMIT=1000

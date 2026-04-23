@@ -34,7 +34,7 @@ class Scan(BaseModel):
 
 class ScanRequest(BaseModel):
     type: ScanType = ScanType.FULL
-    target: str = "192.168.0.0/16"
+    target: str = "auto"
     intensity: str = "normal"
 
 
